@@ -185,6 +185,7 @@ import * as SecretResolver from "@t3tools/secret-provider-core/server/SecretReso
 import * as ServerSettings from "./serverSettings.ts";
 import { invalidateSettingsSecrets } from "./sourceControl/sourceControlHostSecrets.ts";
 import * as DatabaseStorage from "./persistence/DatabaseStorage.ts";
+import * as Dictation from "./dictation/Dictation.ts";
 import * as StorageCleanup from "./storageCleanup.ts";
 import * as TerminalManager from "./terminal/Manager.ts";
 import { terminalOutputStream, withTerminalOutputWindow } from "./terminal/OutputProtocol.ts";
@@ -1343,6 +1344,7 @@ export const layerWsRpc = (
       const secretResolver = yield* SecretResolver.SecretResolver;
       const peerLinks = yield* PeerLinks.PeerLinks;
       const peerLinkRequests = yield* PeerLinkRequests.PeerLinkRequests;
+      const dictation = yield* Dictation.Dictation;
       const startup = yield* ServerRuntimeStartup.ServerRuntimeStartup;
       const workspaceEntries = yield* WorkspaceEntries.WorkspaceEntries;
       const workspaceFileSystem = yield* WorkspaceFileSystem.WorkspaceFileSystem;
@@ -3066,6 +3068,14 @@ export const layerWsRpc = (
         [WS_METHODS.deviceShutdown]: (input) => deviceService.shutdown(input),
         [WS_METHODS.deviceDetail]: (input) => deviceService.detail(input),
         [WS_METHODS.deviceAction]: (input) => deviceService.action(input),
+        [WS_METHODS.dictationInstall]: (input) => dictation.install(input),
+        [WS_METHODS.dictationRemove]: (input) => dictation.remove(input),
+        [WS_METHODS.dictationStart]: () => dictation.start,
+        [WS_METHODS.dictationWarm]: () => dictation.warm,
+        [WS_METHODS.dictationAppend]: (input) => dictation.append(input),
+        [WS_METHODS.dictationFinish]: (input) => dictation.finish(input),
+        [WS_METHODS.dictationCancel]: (input) => dictation.cancel(input),
+        [WS_METHODS.subscribeDictationState]: () => dictation.stateStream,
         [WS_METHODS.subscribeDeviceState]: (_input) => DeviceService.stateStream(deviceService),
         [WS_METHODS.previewStopLocalServer]: (input) => portDiscovery.stopServer(input),
         [WS_METHODS.subscribeDiscoveredLocalServers]: (input) =>
