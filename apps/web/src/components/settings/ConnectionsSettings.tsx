@@ -38,6 +38,7 @@ import { EnvironmentIconMenu } from "./EnvironmentIconPicker";
 import { FoldedSettingsSection } from "./FoldedSettingsSection";
 import { LoadBalancingSettings } from "./LoadBalancingSettings";
 import { PullRequestRoutingSettings } from "./PullRequestRoutingSettings";
+import { DictationRoutingSettings } from "./DictationSettings";
 import { Input } from "../ui/input";
 import {
   Dialog,
@@ -1529,6 +1530,7 @@ export function ConnectionsSettings() {
       ) : null}
       <LoadBalancingSettings environments={loadBalancingEnvironments} />
       <PullRequestRoutingSettings environments={loadBalancingEnvironments} />
+      <DictationRoutingSettings environments={loadBalancingEnvironments} />
     </SettingsPageContainer>
   );
 }
