@@ -1,7 +1,4 @@
-import {
-  closeSkillTokenAtCursor,
-  replaceSpokenSkills,
-} from "@t3tools/shared/inlineSkills";
+import { closeSkillTokenAtCursor, replaceSpokenSkills } from "@t3tools/shared/inlineSkills";
 import { useComposerTypingGuard } from "./useComposerTypingGuard";
 import { insertAttachmentReferencesForDraft } from "./composerAttachmentReferences";
 import { DESKTOP_PASTE_AS_TEXT_EVENT } from "../../lib/desktopPasteAsText";
