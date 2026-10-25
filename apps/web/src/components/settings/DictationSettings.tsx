@@ -11,7 +11,7 @@ import { useState } from "react";
 import {
   useClientSettings,
   useClientSettingsHydrated,
-  useUpdateClientSettings,
+  updateClientSettings,
 } from "~/hooks/useSettings";
 import { formatBytes } from "~/lib/formatBytes";
 import { cn } from "~/lib/utils";
@@ -354,7 +354,6 @@ export function DictationRoutingSettings({
 }) {
   const chosen = useClientSettings((settings) => settings.dictationEnvironmentId);
   const hydrated = useClientSettingsHydrated();
-  const updateSettings = useUpdateClientSettings();
   const ready = useReadyDictationEnvironmentIds();
 
   if (environments.length < 2) return null;
@@ -381,7 +380,7 @@ export function DictationRoutingSettings({
           disabled={!hydrated}
           onValueChange={(value) => {
             if (value === null) return;
-            updateSettings({
+            updateClientSettings({
               dictationEnvironmentId:
                 environments.find((environment) => environment.environmentId === value)
                   ?.environmentId ?? null,
