@@ -1,5 +1,39 @@
 import { DICTATION_SAMPLE_RATE } from "@t3tools/contracts";
 
+const technicalTerms = new Map(
+  [
+    "SSD",
+    "CPU",
+    "GPU",
+    "USB",
+    "API",
+    "URL",
+    "JSON",
+    "HTML",
+    "CSS",
+    "SQL",
+    "SSH",
+    "HTTPS",
+    "HTTP",
+    "NVMe",
+  ]
+    .sort((left, right) => right.length - left.length)
+    .map((term) => [term.toUpperCase(), term]),
+);
+const technicalTermPattern = new RegExp(
+  `(?<![\\p{L}\\p{N}\\p{M}_])(${[...technicalTerms.keys()]
+    .map((term) => `${term}|${[...term].join("(?:[ \\t]+|\\.[ \\t]*)")}`)
+    .join("|")})(s)?(?![\\p{L}\\p{N}\\p{M}_])`,
+  "giu",
+);
+
+export function normalizeTechnicalTerms(text: string): string {
+  return text.replace(technicalTermPattern, (_match, term: string, plural: string | undefined) => {
+    const canonical = technicalTerms.get(term.replace(/[. \t]/g, "").toUpperCase())!;
+    return canonical + (plural ? "s" : "");
+  });
+}
+
 /** Validate and convert the wire PCM without accepting containers or truncated samples. */
 export function decodePcm(pcm: string): Float32Array {
   if (pcm.length % 4 !== 0 || /[^A-Za-z0-9+/=]/.test(pcm)) {
