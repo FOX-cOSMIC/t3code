@@ -1,6 +1,7 @@
 import { describe, expect, it } from "@effect/vitest";
 import {
   cleanWhisperText,
+  normalizeTechnicalTerms,
   isQuiet,
   concatenate,
   decodePcm,
@@ -22,6 +23,32 @@ function tarEntry(name: string, type = "0") {
 }
 
 describe("dictation audio", () => {
+  it("normalizes technical acronyms without guessing at ordinary words", () => {
+    expect(normalizeTechnicalTerms("Use an s s d with a G P U and a U S B port.")).toBe(
+      "Use an SSD with a GPU and a USB port.",
+    );
+    expect(normalizeTechnicalTerms("The api returns json over https to an nvme SSD.")).toBe(
+      "The API returns JSON over HTTPS to an NVMe SSD.",
+    );
+    expect(normalizeTechnicalTerms("Use S.S.D., C. P. U. and A.P.I.")).toBe(
+      "Use SSD., CPU. and API.",
+    );
+    expect(normalizeTechnicalTerms("Two s s ds and three gpuS.")).toBe("Two SSDs and three GPUs.");
+  });
+
+  it("preserves words, identifiers, Unicode boundaries, punctuation and line breaks", () => {
+    const text =
+      "Assess the drive; a speedy bus. my_ssd ssd_cache apiClient json2 \u00e9ssd ssd\u00e9 APIary.\nS\nS D";
+    expect(normalizeTechnicalTerms(text)).toBe(text);
+    expect(normalizeTechnicalTerms("(s s d), [api]!")).toBe("(SSD), [API]!");
+    expect(normalizeTechnicalTerms("")).toBe("");
+  });
+
+  it("keeps technical normalization stable when applied repeatedly", () => {
+    const text = normalizeTechnicalTerms("s s d, H T T P S, nvme and GPU");
+    expect(normalizeTechnicalTerms(text)).toBe(text);
+  });
+
   it("decodes little-endian int16 PCM including signed extrema", () => {
     const pcm = Buffer.alloc(8);
     [-32768, -1, 0, 32767].forEach((sample, i) => pcm.writeInt16LE(sample, i * 2));
