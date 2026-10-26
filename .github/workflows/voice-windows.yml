@@ -94,7 +94,7 @@ jobs:
           shopt -s nullglob
           assets=(release/*.exe release/*.blockmap release/latest.yml)
           [[ -f release/latest.yml ]] || { echo "release/latest.yml missing"; ls release; exit 1; }
-          gh release create "v$VERSION" "${assets[@]}" \
+          gh release create "voice-$VERSION" "${assets[@]}" \
             --repo "$GITHUB_REPOSITORY" \
             --target "$GITHUB_SHA" \
             --title "T3 Code $VERSION (with dictation)" \
