@@ -11,7 +11,7 @@ import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Schema from "effect/Schema";
-import { isQuiet } from "./audio.ts";
+import { isQuiet, normalizeTechnicalTerms } from "./audio.ts";
 import { models, resolveLanguage } from "./models.ts";
 import * as DictationArtifacts from "./DictationArtifacts.ts";
 
@@ -131,7 +131,7 @@ const make = Effect.gen(function* () {
         ),
       );
       return {
-        text: models[model].cleanText(result.text),
+        text: normalizeTechnicalTerms(models[model].cleanText(result.text)),
         locale: result.lang || pinnedLanguage || "en",
       };
     });
