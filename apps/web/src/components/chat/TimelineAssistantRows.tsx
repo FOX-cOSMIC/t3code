@@ -1,7 +1,8 @@
 import { shouldPreserveAssistantLineBreaks } from "@t3tools/shared/markdownPipeline";
 import { type RunId } from "@t3tools/contracts";
 import { canForkProjectedAssistantItem } from "@t3tools/client-runtime/state/thread-workflows";
-import { memo, use, useState } from "react";
+import { memo, use, useState, useSyncExternalStore } from "react";
+import { readAloudPlayback } from "../../lib/readAloudPlayback";
 import { type ChatMessage, type TurnDiffSummary } from "../../types";
 import ChatMarkdown from "../ChatMarkdown";
 import { GitForkIcon } from "lucide-react";
@@ -14,6 +15,7 @@ import { ChangedFilesCard } from "./ChangedFilesTree";
 import { useFileContextMenuHandler } from "../../fileContextMenu";
 import { useAssistantMessageText, useProject, useThreadShell } from "../../state/entities";
 import { MessageCopyButton } from "./MessageCopyButton";
+import { ReadAloudButton } from "./ReadAloudButton";
 import { AssistantCitationSource } from "./AssistantCitationSource";
 import { resolveAssistantMessageCopyState } from "./MessagesTimeline.logic";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
@@ -164,12 +166,18 @@ function AssistantMessageMeta({
   alwaysVisible?: boolean;
 }) {
   const ctx = use(TimelineRowCtx);
+  const speech = useSyncExternalStore(
+    readAloudPlayback.subscribe,
+    readAloudPlayback.snapshot,
+    readAloudPlayback.snapshot,
+  );
+  const reading = speech.key === `${ctx.activeThreadEnvironmentId}:${message.id}`;
 
   return (
     <div
       className={cn(
-        "flex items-center gap-2 text-xs tabular-nums transition-opacity duration-200",
-        alwaysVisible
+        "flex flex-wrap items-center gap-2 text-xs tabular-nums transition-opacity duration-200",
+        alwaysVisible || reading
           ? "opacity-100"
           : "opacity-0 pointer-coarse:opacity-100 focus-within:opacity-100 group-hover/assistant:opacity-100",
         className,
@@ -185,6 +193,13 @@ function AssistantMessageMeta({
         showCopyButton={showCopyButton}
         streaming={copyStreaming}
       />
+      {showCopyButton && !copyStreaming && message.text ? (
+        <ReadAloudButton
+          environmentId={ctx.activeThreadEnvironmentId}
+          messageId={message.id}
+          text={message.text}
+        />
+      ) : null}
       {projectedItem?.item.type === "assistant_message" ? (
         <AssistantForkButton projectedItem={projectedItem} />
       ) : null}

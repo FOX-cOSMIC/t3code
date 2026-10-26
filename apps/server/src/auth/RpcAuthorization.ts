@@ -204,6 +204,7 @@ export const RPC_REQUIRED_SCOPES = {
   [WS_METHODS.deviceAction]: AuthOrchestrationOperateScope,
   [WS_METHODS.subscribeDeviceState]: AuthOrchestrationReadScope,
   [WS_METHODS.dictationInstall]: AuthOrchestrationOperateScope,
+  [WS_METHODS.readAloudGenerate]: AuthOrchestrationOperateScope,
   [WS_METHODS.dictationRemove]: AuthOrchestrationOperateScope,
   [WS_METHODS.dictationStart]: AuthOrchestrationOperateScope,
   [WS_METHODS.dictationWarm]: AuthOrchestrationOperateScope,
