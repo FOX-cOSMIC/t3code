@@ -211,6 +211,7 @@ const RPC_AGGREGATES = {
   [WS_METHODS.deviceAction]: "device",
   [WS_METHODS.subscribeDeviceState]: "device",
   [WS_METHODS.dictationInstall]: "dictation",
+  [WS_METHODS.readAloudGenerate]: "speech",
   [WS_METHODS.dictationRemove]: "dictation",
   [WS_METHODS.dictationStart]: "dictation",
   [WS_METHODS.dictationWarm]: "dictation",

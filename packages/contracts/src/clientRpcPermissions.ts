@@ -53,6 +53,7 @@ export const CLIENT_GUARDED_RPC_SCOPES = {
   // A guest link hands thread access to someone outside, like a pairing link.
   [WS_METHODS.guestShareCreate]: AuthAccessWriteScope,
   [WS_METHODS.dictationInstall]: AuthOrchestrationOperateScope,
+  [WS_METHODS.readAloudGenerate]: AuthOrchestrationOperateScope,
   [WS_METHODS.dictationRemove]: AuthOrchestrationOperateScope,
   [WS_METHODS.dictationStart]: AuthOrchestrationOperateScope,
   [WS_METHODS.dictationWarm]: AuthOrchestrationOperateScope,
