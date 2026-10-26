@@ -1,0 +1,102 @@
+name: Voice build (Windows)
+
+# Lucas's own build: upstream main + dictation PR #19273. The Mac's nightly
+# update.sh pushes `voice` here after its typecheck passes; this builds the
+# unsigned Windows installer and publishes it as the latest release, which the
+# installed app's updater follows (app-update.yml points at this repository).
+# Versions are <server version, patch+1>-voice.<date>.<run>: increasing, and
+# without "-nightly" so the product name and channel stay those of the
+# installed "T3 Code (Beta)".
+
+on:
+  push:
+    branches: [voice]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: voice-windows
+  cancel-in-progress: true
+
+jobs:
+  build:
+    if: github.repository == 'FOX-cOSMIC/t3code'
+    runs-on: windows-latest
+    timeout-minutes: 90
+    env:
+      T3CODE_DESKTOP_UPDATE_REPOSITORY: ${{ github.repository }}
+    steps:
+      # Same checkout as upstream's release-desktop.yml: the vendored .repos
+      # tree has orphaned gitlinks that break actions/checkout's cleanup.
+      - name: Checkout
+        shell: bash
+        env:
+          GIT_TERMINAL_PROMPT: "0"
+        run: |
+          set -euo pipefail
+          git init .
+          git remote add origin "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}.git"
+          git fetch --no-tags --depth=1 origin "$GITHUB_SHA"
+          git sparse-checkout set --no-cone '/*' '!/.repos/'
+          git -c checkout.workers=0 checkout --detach FETCH_HEAD
+
+      - name: Setup Vite+
+        uses: voidzero-dev/setup-vp@250f29ce396baf5e8f24498e17c0dfdebabc26eb # v1
+        with:
+          node-version-file: package.json
+          cache: true
+          run-install: false
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
+        with:
+          toolchain: stable
+          targets: x86_64-pc-windows-msvc
+
+      # Public T3 Connect identifiers, the same ones official builds carry.
+      - name: Enable T3 Connect
+        shell: bash
+        run: cp .env.example .env
+
+      - name: Install dependencies
+        run: vp install --filter=@t3tools/desktop... --filter=t3... --filter=@t3tools/scripts...
+
+      - name: Compute version
+        id: version
+        shell: bash
+        run: |
+          set -euo pipefail
+          base=$(node -p "require('./apps/server/package.json').version.split('-')[0]")
+          IFS=. read -r major minor patch <<<"$base"
+          version="${major}.${minor}.$((patch + 1))-voice.$(date -u +%Y%m%d).${GITHUB_RUN_NUMBER}"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "Building $version"
+
+      - name: Align package versions
+        run: node scripts/update-release-package-versions.ts "${{ steps.version.outputs.version }}"
+
+      - name: Build installer
+        shell: bash
+        run: |
+          vp run dist:desktop:artifact \
+            --platform win --target nsis --arch x64 \
+            --build-version "${{ steps.version.outputs.version }}" --verbose
+
+      - name: Publish release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          assets=(release/*.exe release/*.blockmap release/latest.yml)
+          [[ -f release/latest.yml ]] || { echo "release/latest.yml missing"; ls release; exit 1; }
+          gh release create "v$VERSION" "${assets[@]}" \
+            --repo "$GITHUB_REPOSITORY" \
+            --target "$GITHUB_SHA" \
+            --title "T3 Code $VERSION (with dictation)" \
+            --notes "Upstream main $(git log -1 --format=%h) + dictation PR #19273. Unsigned: Windows SmartScreen warns on the first manual install." \
+            --latest
