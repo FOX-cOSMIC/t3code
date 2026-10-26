@@ -200,14 +200,13 @@ const make = Effect.gen(function* () {
           message: "Local dictation is unavailable on this platform.",
         });
       let lastProgress = -Infinity;
-      const report: typeof progress = (artifact, state) =>
-        Effect.gen(function* () {
-          const now = yield* Clock.currentTimeMillis;
-          if (now - lastProgress >= 250) {
-            yield* progress(artifact, state);
-            lastProgress = now;
-          }
-        });
+      const report: typeof progress = Effect.fn("report")(function* (artifact, state) {
+        const now = yield* Clock.currentTimeMillis;
+        if (now - lastProgress >= 250) {
+          yield* progress(artifact, state);
+          lastProgress = now;
+        }
+      });
       const current = yield* inspect;
       if (current.runtime._tag !== "installed") {
         yield* progress("runtime", { _tag: "installing", receivedBytes: 0, totalBytes: 0 });
