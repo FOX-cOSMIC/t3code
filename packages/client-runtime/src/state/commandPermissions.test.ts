@@ -67,6 +67,22 @@ const setup = Effect.gen(function* () {
 });
 
 describe("command permissions", () => {
+  it.effect("checks the destination operate permission before generating local speech", () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const registry = yield* setup;
+        const speech = createCommandPermissions(runtime, WS_METHODS.readAloudGenerate);
+        registry.set(sessions(env), AsyncResult.success(grant(false)));
+        expect(registry.get(speech.permissionAtom(env))).toBe(false);
+        expect(yield* speech.authorize(registry, env).pipe(Effect.flip)).toMatchObject({
+          requiredPermission: AuthOrchestrationOperateScope,
+        });
+        registry.set(sessions(env), AsyncResult.success(grant(true)));
+        expect(registry.get(speech.permissionAtom(env))).toBe(true);
+        yield* speech.authorize(registry, env);
+      }),
+    ),
+  );
   it.effect("requires the destination preview grant to close a browser tab", () =>
     Effect.scoped(
       Effect.gen(function* () {

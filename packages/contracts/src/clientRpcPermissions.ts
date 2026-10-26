@@ -69,6 +69,7 @@ export const CLIENT_GUARDED_RPC_SCOPES = {
   // A link lets every agent here reach the other environment: Settings' bar.
   [WS_METHODS.peerLinksAnswerRequest]: AuthAccessWriteScope,
   [WS_METHODS.dictationInstall]: AuthOrchestrationOperateScope,
+  [WS_METHODS.readAloudGenerate]: AuthOrchestrationOperateScope,
   [WS_METHODS.dictationRemove]: AuthOrchestrationOperateScope,
   [WS_METHODS.dictationStart]: AuthOrchestrationOperateScope,
   [WS_METHODS.dictationWarm]: AuthOrchestrationOperateScope,

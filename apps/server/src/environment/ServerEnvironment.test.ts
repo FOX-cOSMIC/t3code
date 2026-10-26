@@ -74,6 +74,22 @@ const makeServerConfig = Effect.fn(function* (baseDir: string) {
 });
 
 it.layer(NodeServices.layer)("ServerEnvironmentLive", (it) => {
+  it.effect.each(["win32", "darwin", "linux"] as const)(
+    "reports read-aloud capability for %s",
+    (platform) =>
+      Effect.gen(function* () {
+        const fs = yield* FileSystem.FileSystem;
+        const baseDir = yield* fs.makeTempDirectoryScoped();
+        const supported = yield* Effect.gen(function* () {
+          const environment = yield* ServerEnvironment.ServerEnvironment;
+          return (yield* environment.getDescriptor).capabilities.readAloud;
+        }).pipe(
+          Effect.provide(layerServerEnvironment(baseDir)),
+          Effect.provideService(HostProcess.Platform, platform),
+        );
+        expect(supported).toBe(platform === "win32");
+      }),
+  );
   it.effect("publishes proven install ownership only for manually updated servers", () =>
     Effect.gen(function* () {
       const fs = yield* FileSystem.FileSystem;

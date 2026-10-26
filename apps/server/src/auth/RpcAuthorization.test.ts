@@ -75,7 +75,49 @@ describe("RPC authorization scopes", () => {
       );
     }
   });
+
+  it("requires operate permission for local speech generation", () => {
+    expect(requiredScopeForRpcMethod(WS_METHODS.readAloudGenerate)).toBe(
+      AuthOrchestrationOperateScope,
+    );
+  });
 });
+
+it.effect("rejects read-only speech generation before launching the speech engine", () =>
+  Effect.gen(function* () {
+    const group = WsRpcGroup.omit(
+      ...[...WsRpcGroup.requests.keys()].filter(
+        (
+          tag,
+        ): tag is Exclude<keyof typeof RPC_REQUIRED_SCOPES, typeof WS_METHODS.readAloudGenerate> =>
+          tag !== WS_METHODS.readAloudGenerate,
+      ),
+    );
+    let handled = false;
+    const handler = group.toLayerHandler(WS_METHODS.readAloudGenerate, () =>
+      Effect.sync(() => {
+        handled = true;
+        return { audioBase64: "AAAA", mimeType: "audio/wav" as const };
+      }),
+    );
+    const denied = yield* RpcTest.makeClient(group).pipe(
+      Effect.provide(Layer.merge(handler, RpcAuthorization.layer([AuthOrchestrationReadScope]))),
+    );
+    expect(
+      yield* denied[WS_METHODS.readAloudGenerate]({ text: "Hello", language: "en" }).pipe(
+        Effect.flip,
+      ),
+    ).toMatchObject({ requiredPermission: AuthOrchestrationOperateScope });
+    expect(handled).toBe(false);
+    const allowed = yield* RpcTest.makeClient(group).pipe(
+      Effect.provide(Layer.merge(handler, RpcAuthorization.layer([AuthOrchestrationOperateScope]))),
+    );
+    expect(
+      yield* allowed[WS_METHODS.readAloudGenerate]({ text: "Hallo", language: "de" }),
+    ).toMatchObject({ mimeType: "audio/wav" });
+    expect(handled).toBe(true);
+  }).pipe(Effect.scoped),
+);
 
 it("requires operate permission for host retry while preserving read-only listing", () => {
   expect(requiredScopeForDeviceList({})).toBe(AuthOrchestrationReadScope);

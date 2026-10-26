@@ -15,6 +15,14 @@
       "types": "./src/zip/zipDirectory.ts",
       "default": "./src/zip/zipDirectory.ts"
     },
+    "./read-aloud-playback": {
+      "types": "./src/readAloudPlayback.ts",
+      "default": "./src/readAloudPlayback.ts"
+    },
+    "./state/read-aloud": {
+      "types": "./src/state/read-aloud.ts",
+      "default": "./src/state/read-aloud.ts"
+    },
     "./workspace-basename-lookup": {
       "types": "./src/workspaceBasenameLookup.ts",
       "default": "./src/workspaceBasenameLookup.ts"
