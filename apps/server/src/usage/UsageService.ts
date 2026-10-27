@@ -52,7 +52,6 @@ import {
   dedupeWithinFile,
   LEGACY_SCAN_CACHE_FILE_NAMES,
   makeScanCacheWriter,
-  pruneScanCache,
   SCAN_CACHE_FILE_NAME,
   type CachedFile,
   type ScanCache,
@@ -71,7 +70,8 @@ const RATES_REFRESH_FLOOR_MS = 60 * 1000;
 const MTIME_SLACK_MS = 36 * 60 * 60 * 1000;
 const MAX_HOURLY_WINDOW_MS = 24 * 60 * 60 * 1000;
 
-const CACHE_RETENTION_DAYS = 92;
+// Saved usage has no age limit: transcripts get deleted, and Cursor fetches its history once.
+const RETENTION_CUTOFF_MS = 0;
 
 const TRANSCRIPT_READ_CONCURRENCY = 4;
 
@@ -297,7 +297,6 @@ export const make = Effect.gen(function* () {
 
   const resolveTranscriptDirs = Effect.fn("UsageService.resolveTranscriptDirs")(function* (
     settings: ServerSettingsValue,
-    retentionCutoffMs: number,
   ) {
     const dirs: Array<TranscriptSource> = [];
     const seen = new Set<string>();
@@ -319,7 +318,6 @@ export const make = Effect.gen(function* () {
           .some(
             ([filePath, entry]) =>
               entry.provider === provider &&
-              entry.mtimeMs >= retentionCutoffMs &&
               (entry.records.length + entry.tailRecords.length > 0 || entry.malformedRecords > 0) &&
               isWithinDirectory(filePath, dir),
           );
@@ -583,19 +581,22 @@ export const make = Effect.gen(function* () {
   const collectDirs = Effect.fn("UsageService.collectDirs")(function* (
     windowStartMs: number,
     settings: ServerSettingsValue,
-    retentionCutoffMs: number,
     awaitRefresh: boolean,
   ) {
-    const dirs = yield* resolveTranscriptDirs(settings, retentionCutoffMs).pipe(
-      Effect.provideContext(readerContext),
-    );
+    const dirs = yield* resolveTranscriptDirs(settings).pipe(Effect.provideContext(readerContext));
 
     const scans = Effect.forEach(
       scanReaders,
       ({ driver, reader }) =>
         usageInstances(driver, settings).pipe(
           Effect.flatMap((instances) =>
-            reader.scan({ instances, settings, windowStartMs, retentionCutoffMs, awaitRefresh }),
+            reader.scan({
+              instances,
+              settings,
+              windowStartMs,
+              retentionCutoffMs: RETENTION_CUTOFF_MS,
+              awaitRefresh,
+            }),
           ),
           Effect.flatMap((sources) =>
             Effect.forEach(sources, ({ volumeId, ...source }) =>
@@ -675,13 +676,8 @@ export const make = Effect.gen(function* () {
     const windowStartMs =
       (hourlyWindow?.sinceTimeMs ?? DateTime.toEpochMillis(windowStart.value)) - MTIME_SLACK_MS;
 
-    const retentionCutoffMs = startedAtMs - CACHE_RETENTION_DAYS * 24 * 60 * 60 * 1000;
-
     const [, scannedDirs] = yield* Effect.all(
-      [
-        ensureRates(false),
-        collectDirs(windowStartMs, settings, retentionCutoffMs, input.awaitRefresh === true),
-      ],
+      [ensureRates(false), collectDirs(windowStartMs, settings, input.awaitRefresh === true)],
       { concurrency: 2 },
     );
 
@@ -699,14 +695,13 @@ export const make = Effect.gen(function* () {
     const sources: UsageSource[] = [];
 
     // Deleted transcripts' saved usage still aggregates and deduplicates normally.
-    const retainedSinceMs = Math.max(windowStartMs, retentionCutoffMs);
     const filesByDir = scannedDirs.map(({ provider, dir, files }) => {
       const retainedFiles = [...(files ?? [])];
       const livePaths = new Set(retainedFiles.map((file) => file.path));
       for (const [filePath, entry] of fileCache) {
         if (
           entry.provider !== provider ||
-          entry.mtimeMs < retainedSinceMs ||
+          entry.mtimeMs < windowStartMs ||
           livePaths.has(filePath) ||
           !isWithinDirectory(filePath, dir)
         )
@@ -837,9 +832,6 @@ export const make = Effect.gen(function* () {
         ...(refreshing ? { refreshing } : {}),
       });
     }
-
-    const pruned = pruneScanCache(fileCache, retentionCutoffMs);
-    if (pruned > 0) cacheDirty = true;
 
     const aggregated = aggregator.finish();
     const readAt = yield* DateTime.now;
