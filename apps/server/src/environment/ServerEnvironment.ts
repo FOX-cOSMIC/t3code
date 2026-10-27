@@ -217,7 +217,7 @@ export const make = Effect.gen(function* () {
     orchestrationProtocolVersion: ORCHESTRATION_PROTOCOL_VERSION,
     ...(databaseMigration === undefined ? {} : { databaseMigration }),
     capabilities: {
-      readAloud: hostPlatform === "win32",
+      readAloud: hostPlatform === "win32" || hostPlatform === "darwin",
       repositoryIdentity: true,
       connectionProbe: true,
       attachmentUploads: true,
