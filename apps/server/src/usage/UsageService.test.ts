@@ -66,10 +66,15 @@ const encodeUnknownJson = Schema.encodeEffect(Schema.fromJsonString(Schema.Unkno
 const encodeUnknownJsonString = Schema.encodeSync(Schema.fromJsonString(Schema.Unknown));
 const decodeUnknownJsonString = Schema.decodeSync(Schema.fromJsonString(Schema.Unknown));
 
-function claudeLine(id: number, outputTokens: number, model = "claude-fable-5"): string {
+function claudeLine(
+  id: number,
+  outputTokens: number,
+  model = "claude-fable-5",
+  timestamp = "2026-08-01T10:00:00Z",
+): string {
   return `${JSON.stringify({
     type: "assistant",
-    timestamp: "2026-08-01T10:00:00Z",
+    timestamp,
     requestId: `req_${id}`,
     sessionId: "session-1",
     message: {
@@ -2535,6 +2540,38 @@ describe("UsageService", () => {
           layerService({ prefix: "usage-service-missing-diagnostics", home, settings }),
         ),
       );
+    }).pipe(Effect.scoped),
+  );
+
+  it.live("keeps saved usage of a removed transcript for good, even when its file is old", () =>
+    Effect.gen(function* () {
+      const { transcript, settings, home } = yield* setup;
+      const lastWrite = "2026-01-15T10:00:00Z";
+      yield* Effect.promise(async () => {
+        await NodeFSP.writeFile(transcript, claudeLine(1, 5, "claude-fable-5", lastWrite));
+        const seconds = Date.parse(lastWrite) / 1000;
+        await NodeFSP.utimes(transcript, seconds, seconds);
+      });
+      const layer = layerService({ prefix: "usage-service-permanent-test", home, settings });
+      const january: UsageSummaryInput = {
+        timeZone: "UTC",
+        sinceDay: UsageDay.make("2026-01-14"),
+        untilDay: UsageDay.make("2026-01-16"),
+      };
+      const service = yield* UsageService.make.pipe(Effect.provide(layer));
+      const first = yield* service.readSummary(january);
+      assert.strictEqual(totalOutputTokens(first), 5);
+
+      yield* Effect.promise(() =>
+        NodeFSP.rm(NodePath.join(home, "claude", "projects"), { recursive: true }),
+      );
+      const removed = yield* service.readSummary(january);
+      assert.deepStrictEqual(removed.buckets, first.buckets);
+
+      yield* service.awaitPersisted;
+      const restarted = yield* UsageService.make.pipe(Effect.provide(layer));
+      const restored = yield* restarted.readSummary(january);
+      assert.deepStrictEqual(restored.buckets, first.buckets);
     }).pipe(Effect.scoped),
   );
 
