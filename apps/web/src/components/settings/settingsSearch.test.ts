@@ -52,6 +52,18 @@ const ITEMS: ReadonlyArray<SettingsSearchItem> = [
 ];
 
 describe("searchSettings", () => {
+  it("routes dictation search results to device settings", () => {
+    const items = SETTINGS_SEARCH_ITEMS.filter((item) =>
+      ["dictation-engine", "dictation-model", "dictation-language"].includes(item.id),
+    );
+    expect(items).toHaveLength(3);
+    expect(items.map((item) => item.to)).toEqual([
+      "/settings/devices",
+      "/settings/devices",
+      "/settings/devices",
+    ]);
+  });
+
   it("matches titles, sections, and remembered setting details", () => {
     expect(searchSettings("word", ITEMS).map((item) => item.id)).toEqual(["word-wrap"]);
     expect(searchSettings("network", ITEMS).map((item) => item.id)).toEqual(["network-access"]);
