@@ -15,7 +15,7 @@ cost, split by token type and by speed. These estimates are not your subscriptio
 split, such as a provider-reported cost for a model without public rates, shows as **Other**.
 Select a model under **Breakdown** to see its trend, cache hit rate, and cost per million tokens.
 
-Totals depend on the history available on each server. Grok turns without a saved completed-turn
+Totals depend on the history each server has saved, which keeps transcripts deleted since they were read. Grok turns without a saved completed-turn
 record are missing from the totals.
 
 OpenCode reads its SQLite database and older JSON history. Antigravity reads local conversation
