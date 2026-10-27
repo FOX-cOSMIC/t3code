@@ -6,7 +6,8 @@ export type ReadAloudLanguage = typeof ReadAloudLanguage.Type;
 
 export const ReadAloudInput = Schema.Struct({
   text: TrimmedNonEmptyString.check(Schema.isMaxLength(20_000)),
-  language: ReadAloudLanguage,
+  /** Omit to let the environment detect English or German from the text. */
+  language: Schema.optionalKey(ReadAloudLanguage),
 });
 export type ReadAloudInput = typeof ReadAloudInput.Type;
 
