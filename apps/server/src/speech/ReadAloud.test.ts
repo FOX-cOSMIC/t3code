@@ -63,7 +63,7 @@ describe("ReadAloud", () => {
       expect(yield* service.generate({ text: "Hello" }).pipe(Effect.flip)).toMatchObject({
         reason: "unsupported",
       });
-    }).pipe(Effect.provide(provide(() => Effect.die("must not run"), "darwin"))),
+    }).pipe(Effect.provide(provide(() => Effect.die("must not run"), "linux"))),
   );
 
   it.effect.each(["```\ncode only\n```", "x".repeat(4001)])(

@@ -38,10 +38,10 @@ const make = Effect.gen(function* () {
   const platform = yield* HostProcess.Platform;
   const synthesis = yield* Semaphore.make(1);
   const generate = Effect.fn("ReadAloud.generate")(function* (input: ReadAloudInput) {
-    if (platform !== "win32")
+    if (platform !== "win32" && platform !== "darwin")
       return yield* new ReadAloudError({
         reason: "unsupported",
-        message: "Read aloud currently requires a Windows environment.",
+        message: "Read aloud currently requires a Windows or Mac environment.",
       });
     const validated = yield* decodeInput(input).pipe(
       Effect.mapError(
