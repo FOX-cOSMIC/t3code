@@ -8,8 +8,8 @@ playback, press **Play** once the audio is ready.
 Speech is generated locally by neural voice models on the environment hosting the thread:
 Kokoro for English and Piper "Thorsten" for German. No cloud speech service or microphone is
 used. The audio plays only on the device where you pressed the button, including a phone
-connected to that environment. The Windows PC must be on and connected. Mac and Linux speech
-generation are not supported in this version.
+connected to that environment. The Windows PC or Mac must be on and connected. Linux speech
+generation is not supported in this version.
 
 The first time you use it, the environment downloads the voices (about 430 MB, checked
 against pinned hashes) and shows the progress as a message; press **Read aloud** again once it
