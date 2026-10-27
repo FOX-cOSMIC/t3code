@@ -1,5 +1,5 @@
 import { useAtomValue } from "@effect/atom-react";
-import type { EnvironmentId, ReadAloudLanguage } from "@t3tools/contracts";
+import type { EnvironmentId } from "@t3tools/contracts";
 import { squashAtomCommandFailure } from "@t3tools/client-runtime/state/runtime";
 import { Volume2Icon, PauseIcon, SquareIcon } from "lucide-react";
 import { useSyncExternalStore } from "react";
@@ -24,8 +24,8 @@ export function ReadAloudButton(props: {
   const { presentation } = useEnvironmentPresentation(props.environmentId);
   const key = `${props.environmentId}:${props.messageId}`;
   const active = state.key === key;
-  const start = (language: ReadAloudLanguage) => {
-    void readAloudPlayback.start(key, { text: props.text, language }, async (input) => {
+  const start = () => {
+    void readAloudPlayback.start(key, { text: props.text }, async (input) => {
       const result = await generate({ environmentId: props.environmentId, input });
       if (result._tag === "Failure") throw squashAtomCommandFailure(result);
       return result.value;
@@ -67,27 +67,16 @@ export function ReadAloudButton(props: {
           </Button>
         </>
       ) : (
-        <>
-          <Button
-            size="xs"
-            variant="ghost-muted"
-            disabled={!allowed}
-            aria-label="Read aloud with English voice"
-            onClick={() => start("en")}
-          >
-            <Volume2Icon className="size-3" />
-            Read EN
-          </Button>
-          <Button
-            size="xs"
-            variant="ghost-muted"
-            disabled={!allowed}
-            aria-label="Read aloud with German voice"
-            onClick={() => start("de")}
-          >
-            Read DE
-          </Button>
-        </>
+        <Button
+          size="xs"
+          variant="ghost-muted"
+          disabled={!allowed}
+          aria-label="Read aloud"
+          onClick={start}
+        >
+          <Volume2Icon className="size-3" />
+          Read aloud
+        </Button>
       )}
       {active && state.error ? (
         <span role="status" className="max-w-sm text-xs text-muted-foreground">
