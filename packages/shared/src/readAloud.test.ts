@@ -1,5 +1,25 @@
 import { describe, expect, it } from "vite-plus/test";
-import { readAloudText } from "./readAloud.ts";
+import { detectReadAloudLanguage, readAloudText } from "./readAloud.ts";
+
+describe("detectReadAloudLanguage", () => {
+  it("detects English and German prose", () => {
+    expect(detectReadAloudLanguage("This is a test of the voice that you can use.")).toBe("en");
+    expect(detectReadAloudLanguage("Das ist ein Test der Stimme, die Sie nutzen können.")).toBe(
+      "de",
+    );
+    expect(detectReadAloudLanguage("Grüße aus Köln, wir sind schon über der Straße.")).toBe("de");
+  });
+
+  it("falls back to English without evidence and follows the majority in mixed text", () => {
+    expect(detectReadAloudLanguage("")).toBe("en");
+    expect(detectReadAloudLanguage("SSD NVMe 1234")).toBe("en");
+    expect(
+      detectReadAloudLanguage(
+        "Der Server ist nicht erreichbar und die Anfrage wurde abgelehnt, use the fix.",
+      ),
+    ).toBe("de");
+  });
+});
 
 describe("readAloudText", () => {
   it("reads prose and link labels, but skips code blocks, images, tables and HTML", () => {
