@@ -245,8 +245,11 @@ export function formatRelativeHourShort(
   return formatDateTimeShort(hourStart, timeZone, hour12);
 }
 
+/** Lower bound for All time; the chart starts at the first saved day, so this only bounds the scan. */
+export const USAGE_ALL_TIME_SINCE_DAY = UsageDay.make("2000-01-01");
+
 export function makeWindow(
-  days: number,
+  days: number | "all",
   now = new Date(),
   resolution: UsageResolution = "day",
 ): UsageSummaryInput {
@@ -269,6 +272,14 @@ export function makeWindow(
     });
   }
   const untilDay = format.format(now);
+  if (days === "all") {
+    return {
+      sinceDay: USAGE_ALL_TIME_SINCE_DAY,
+      untilDay: UsageDay.make(untilDay),
+      timeZone,
+      resolution: "day",
+    };
+  }
   if (resolution === "hour") {
     const untilTimeMs = Math.floor(now.getTime() / 60_000) * 60_000;
     const sinceTimeMs = untilTimeMs - 24 * HOUR_MS;
@@ -294,4 +305,16 @@ export function makeWindow(
     timeZone,
     resolution,
   };
+}
+
+/** Day the shown usage starts from; All time begins at its first saved day, not its lower bound. */
+export function usageSinceDay(
+  window: Pick<UsageSummaryInput, "sinceDay" | "untilDay">,
+  daily: readonly { readonly day: string }[],
+): string {
+  if (window.sinceDay !== USAGE_ALL_TIME_SINCE_DAY) return window.sinceDay;
+  return daily.reduce<string>(
+    (first, entry) => (entry.day < first ? entry.day : first),
+    window.untilDay,
+  );
 }

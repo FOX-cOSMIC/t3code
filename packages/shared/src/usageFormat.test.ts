@@ -2,7 +2,13 @@
 import { describe, expect, it, vi } from "vite-plus/test";
 import type { UsageSource } from "@t3tools/contracts";
 
-import { formatHourShort, makeWindow, usageSourceMessages } from "./usageFormat.ts";
+import {
+  formatHourShort,
+  makeWindow,
+  USAGE_ALL_TIME_SINCE_DAY,
+  usageSinceDay,
+  usageSourceMessages,
+} from "./usageFormat.ts";
 
 function malformedSource(count: number, overrides: Partial<UsageSource> = {}): UsageSource {
   return {
@@ -175,5 +181,27 @@ describe("hourly usage formatting", () => {
     } finally {
       resolvedOptions.mockRestore();
     }
+  });
+});
+
+describe("All time window", () => {
+  it("runs from the all-time bound to today", () => {
+    const now = new Date("2026-10-28T12:00:00Z");
+    const window = makeWindow("all", now);
+    expect(window.sinceDay).toBe(USAGE_ALL_TIME_SINCE_DAY);
+    expect(window.untilDay).toBe(makeWindow(7, now).untilDay);
+    expect(window.resolution).toBe("day");
+  });
+
+  it("starts the shown usage at the first saved day, or today when nothing is saved", () => {
+    const window = makeWindow("all", new Date("2026-10-28T12:00:00Z"));
+    const daily = [{ day: "2026-03-02" }, { day: "2025-12-31" }, { day: "2026-10-01" }];
+    expect(usageSinceDay(window, daily)).toBe("2025-12-31");
+    expect(usageSinceDay(window, [])).toBe(window.untilDay);
+  });
+
+  it("leaves bounded windows at their own start", () => {
+    const window = makeWindow(7, new Date("2026-10-28T12:00:00Z"));
+    expect(usageSinceDay(window, [{ day: "2026-01-01" }])).toBe(window.sinceDay);
   });
 });

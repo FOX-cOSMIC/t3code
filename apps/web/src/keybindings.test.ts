@@ -919,4 +919,15 @@ describe("Usage shortcuts", () => {
       }),
     );
   });
+
+  it("matches shifted zero for All time", () => {
+    const shortcut = event({ key: ")", code: "Digit0", ctrlKey: true, shiftKey: true });
+    assert.strictEqual(
+      resolveShortcutCommand(shortcut, DEFAULT_RESOLVED_KEYBINDINGS, {
+        platform: "Linux",
+        context: { usagePageOpen: true },
+      }),
+      "usage.period.all",
+    );
+  });
 });
