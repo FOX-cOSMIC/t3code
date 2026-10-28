@@ -32,6 +32,11 @@ describe("Usage page preferences", () => {
     expect(readUsagePagePreferences()).toEqual({ metric: "tokens", windowDays: 30 });
   });
 
+  it("keeps the All time period", () => {
+    saveUsagePagePreferences({ metric: "cost", windowDays: "all" });
+    expect(readUsagePagePreferences()).toEqual({ metric: "cost", windowDays: "all" });
+  });
+
   // regression: #10189 an invalid saved usage selection was never replaced
   it.each([
     "not-json",
