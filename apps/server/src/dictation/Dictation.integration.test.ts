@@ -27,6 +27,7 @@ const model = candidate;
 const home = process.env.T3_DICTATION_E2E_HOME;
 
 /** Run explicitly with the spike model directory. Runtime + tokens use real HTTP; ONNX bytes stream from the verified cache. */
+// oxlint-disable-next-line t3code/no-test-timeout-or-unreasoned-skip -- Opt-in real-model run. The paced feed takes the recording's real length by design, so no event marks its end. The 15-minute override is the cap for that.
 it.live.skipIf(!fixture)(
   "installs and transcribes through the real native runtime",
   () =>
@@ -119,6 +120,7 @@ it.live.skipIf(!fixture)(
           recordingSeconds: number;
           startMs: number;
         }[] = [];
+        // oxlint-disable-next-line t3code/no-polling-loop-in-tests -- A fixed number of real runs. Each one ends at finish(), and the only timed wait is the paced feed inside.
         for (let run = 0; run < (model === "whisper-turbo" ? 4 : 3); run++) {
           if (model === "whisper-turbo" && run === 1)
             yield* settings.updateSettings({ dictation: { language: "en" } });
@@ -134,6 +136,7 @@ it.live.skipIf(!fixture)(
           const { sessionId } = yield* service.start;
           const startMs = (yield* Clock.currentTimeMillis) - beforeStart;
           let chunkCount = 0;
+          // oxlint-disable-next-line t3code/no-polling-loop-in-tests -- A fixed number of chunks, paced like a microphone so background decoding overlaps speech.
           for (let offset = 0; offset < recording.length; offset += 3200) {
             yield* service.append({
               sessionId,
@@ -141,6 +144,7 @@ it.live.skipIf(!fixture)(
               pcm: recording.subarray(offset, offset + 3200).toString("base64"),
             });
             // Pace the recording as a microphone would, so background decoding overlaps speech.
+            // oxlint-disable-next-line t3code/no-real-time-wait-in-tests -- The pace is part of what this test checks, so the sleep stands in for the microphone's real clock.
             yield* Effect.sleep("100 millis");
           }
           const beforeFinish = yield* Clock.currentTimeMillis;
