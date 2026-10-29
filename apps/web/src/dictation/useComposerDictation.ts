@@ -11,6 +11,7 @@ import { useNavigate } from "@tanstack/react-router";
 import { use, useEffect, useLayoutEffect, useRef, useState } from "react";
 
 import { toastManager } from "../components/ui/toast";
+import { useStableCallback } from "../hooks/useStableCallback";
 import {
   dictationEnvironment,
   useDictationEnvironmentId,
@@ -29,17 +30,16 @@ type ComposerDictationInput = Parameters<typeof useComposerDictation>[0] & {
 /** Wires a controller to the composer's latest input, read when callbacks run. */
 function createComposerDictationController(input: {
   readonly registry: AtomRegistry.AtomRegistry;
-  readonly latest: { readonly current: ComposerDictationInput };
-  readonly committed: { current: boolean };
+  readonly readLatest: () => ComposerDictationInput;
+  readonly markCommitted: () => void;
   readonly setState: (state: VoiceInputState) => void;
 }) {
-  const { latest, committed } = input;
   let controller: VoiceInputController | null = null;
   const streaming = createStreamingDictation({
     registry: input.registry,
-    resolveEnvironmentId: () => latest.current.environmentId,
+    resolveEnvironmentId: () => input.readLatest().environmentId,
     interrupt: (message) => void controller?.interruptRecording(message),
-    rewriteTranscript: (text) => latest.current.rewriteTranscript(text),
+    rewriteTranscript: (text) => input.readLatest().rewriteTranscript(text),
     finishedAtLimit: (uri) =>
       void controller?.handleRecorderStatus({
         isFinished: true,
@@ -51,12 +51,13 @@ function createComposerDictationController(input: {
   const created = new VoiceInputController({
     ...streaming.dependencies,
     readDraft: () => {
-      const draft = latest.current.readDraft();
-      return draft && { ...draft, ownerKey: latest.current.ownerKey, revision: 0 };
+      const latest = input.readLatest();
+      const draft = latest.readDraft();
+      return draft && { ...draft, ownerKey: latest.ownerKey, revision: 0 };
     },
     commitDraft: (text, selection, inserted) => {
-      committed.current = true;
-      latest.current.commitDraft(text, selection, inserted);
+      input.markCommitted();
+      input.readLatest().commitDraft(text, selection, inserted);
     },
     // Render first, so the UI follows the controller even if cleanup throws.
     onStateChange: (next) => {
@@ -99,9 +100,13 @@ export function useComposerDictation(input: {
   const committed = useRef(false);
   const [state, setState] = useState(IDLE_STATE);
 
-  // oxlint-disable-next-line react/refs -- The controller reads these refs only from its callbacks, after render.
+  // The controller gets stable functions instead of the refs, so no ref is passed during render.
+  const readLatest = useStableCallback(() => latest.current);
+  const markCommitted = useStableCallback(() => {
+    committed.current = true;
+  });
   const [{ controller, level, capturedAudio }] = useState(() =>
-    createComposerDictationController({ registry, latest, committed, setState }),
+    createComposerDictationController({ registry, readLatest, markCommitted, setState }),
   );
 
   const ownerKey = useRef(input.ownerKey);
