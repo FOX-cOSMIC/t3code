@@ -12,15 +12,10 @@ const FALL_MS = 140;
 const SETTLE_EPSILON = 0.002;
 
 /**
- * Animates the indicator's bars from the live microphone level.
- *
- * Each level push (about 25 a second) sets new targets: a bell-shaped envelope,
- * a ripple that delays outer bars by reading older levels, and a slow per-bar
- * variation so the shape never looks stamped. Bars then ease toward their
- * targets on animation frames, independent of refresh rate, and the frame loop
- * stops as soon as every bar settles, so silence and the transcribing phase
- * cost nothing. Only `transform` is written, so the browser never lays out or
- * repaints the composer. Returns a function that stops driving the bars.
+ * Animates the bars from the live microphone level, easing toward each level push on
+ * animation frames at any refresh rate. The loop stops once every bar settles, so silence
+ * costs nothing. Only `transform` is written, so the composer never lays out or repaints.
+ * Returns a function that stops driving the bars.
  */
 export function driveDictationWaveform(
   bars: ReadonlyArray<HTMLElement>,

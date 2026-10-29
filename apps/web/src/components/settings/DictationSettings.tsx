@@ -83,11 +83,10 @@ const modelDetail = (model: DictationModel) =>
   [model.languages, formatBytes(model.downloadBytes), model.note].filter(Boolean).join(" · ");
 
 /**
- * Dictation for the environments selected in the settings header. Choosing a
- * model while dictation is on is what downloads it; the status line follows
- * that download. The language row is always present (disabled for models that
- * only detect automatically) so switching models never shifts the layout. Changing settings needs settings:write; retrying a download
- * and removing an inactive model need orchestration:operate.
+ * Dictation for the environments selected in the settings header. Choosing a model while
+ * dictation is on downloads it. The language row stays in place, disabled for models that
+ * only detect automatically. Changing settings needs settings:write; retrying a download or
+ * removing an inactive model needs orchestration:operate.
  */
 export function DictationSettingsSection() {
   const { scope, environment, connectedEnvironments } = useSettingsScope();
