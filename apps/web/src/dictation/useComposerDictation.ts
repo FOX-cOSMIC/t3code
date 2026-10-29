@@ -8,7 +8,7 @@ import {
 import type { EnvironmentId } from "@t3tools/contracts";
 import type { AtomRegistry } from "effect/reactivity";
 import { useNavigate } from "@tanstack/react-router";
-import { use, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { use, useEffect, useLayoutEffect, useRef, useState } from "react";
 
 import { toastManager } from "../components/ui/toast";
 import {
@@ -92,6 +92,7 @@ export function useComposerDictation(input: {
   const { state: environmentState } = useDictationState(environmentId);
   const modelLoaded = environmentState?.loadedModel != null;
   const latest = useRef({ ...input, environmentId, modelLoaded });
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- Keeps `latest` in step with each render, since the controller reads it from callbacks outside React.
   useLayoutEffect(() => {
     latest.current = { ...input, environmentId, modelLoaded };
   });
@@ -104,29 +105,32 @@ export function useComposerDictation(input: {
   );
 
   const ownerKey = useRef(input.ownerKey);
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- Tells the controller, which lives until unmount, that the draft's owner changed.
   useEffect(() => {
     if (ownerKey.current === input.ownerKey) return;
     ownerKey.current = input.ownerKey;
     controller.ownerChanged();
   }, [controller, input.ownerKey]);
 
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- Disposes the controller, a resource held until unmount.
   useEffect(() => () => controller.dispose(), [controller]);
 
   // The editor is enabled again by the time this parent effect runs.
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- Focuses and flashes the editor's DOM node once the render that re-enables it has committed.
   useEffect(() => {
     if (state.phase !== "idle" || !committed.current) return;
     committed.current = false;
     latest.current.onCommitted();
   }, [state.phase]);
 
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- Shows the controller's error in the toast manager, which lives outside React, then cancels it.
   useEffect(() => {
     if (state.phase !== "error" || state.error === null) return;
     toastManager.add({ type: "error", title: state.error });
     controller.cancel();
   }, [controller, state]);
 
-  // Stable across renders so callers can run it from an effect keyed only on focus.
-  const warm = useCallback(() => {
+  const warm = () => {
     const { environmentId: target, modelLoaded: loaded } = latest.current;
     if (target === null || loaded) return;
     void runAtomCommand(
@@ -135,7 +139,7 @@ export function useComposerDictation(input: {
       { environmentId: target, input: {} },
       { reportFailure: false },
     );
-  }, [registry]);
+  };
 
   const openSettings = () =>
     void navigate({
