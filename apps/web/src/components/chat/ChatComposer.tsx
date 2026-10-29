@@ -1063,10 +1063,10 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
   const isSoftwareKeyboardOpen = useSoftwareKeyboardOpen();
   const [isComposerFocused, setIsComposerFocused] = useState(false);
   // Focusing the composer usually comes right before dictating; load the speech model early.
-  const warmDictation = dictation.warm;
-  useEffect(() => {
-    if (isComposerFocused) warmDictation();
-  }, [isComposerFocused, warmDictation]);
+  const markComposerFocused = () => {
+    if (!isComposerFocused) dictation.warm();
+    setIsComposerFocused(true);
+  };
   const [composerSubmissionError, setComposerSubmissionError] = useState<string | null>(null);
   const [providerInputSubmissionError, setProviderInputSubmissionError] = useState<string | null>(
     null,
@@ -1220,9 +1220,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
     activePendingProgress?.activeQuestion?.allowCustomAnswer === false;
   /** The editor refuses text for these reasons; dictation also freezes it while active. */
   const composerTextUnavailable =
-    projectSelectionRequired ||
-    isChoiceOnlyPendingQuestion ||
-    activePendingIsResponding;
+    projectSelectionRequired || isChoiceOnlyPendingQuestion || activePendingIsResponding;
   // Background threads render a composer too; only the foreground one owns the shortcut.
   const backgroundThread = use(BackgroundThreadContext);
   useDictationHoldShortcut({
@@ -2240,7 +2238,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
       window.cancelAnimationFrame(mobileComposerExpandReleaseFrameRef.current);
     }
     mobileComposerExpandInFlightRef.current = true;
-    setIsComposerFocused(true);
+    markComposerFocused();
     mobileComposerExpandFrameRef.current = window.requestAnimationFrame(() => {
       mobileComposerExpandFrameRef.current = null;
       composerEditorRef.current?.focusAtEnd();
@@ -2843,7 +2841,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
         window.cancelAnimationFrame(composerBlurFrameRef.current);
         composerBlurFrameRef.current = null;
       }
-      setIsComposerFocused(true);
+      markComposerFocused();
     }
     setIsComposerModelPickerOpen(true);
   };
@@ -2934,7 +2932,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
           window.cancelAnimationFrame(composerBlurFrameRef.current);
           composerBlurFrameRef.current = null;
         }
-        flushSync(() => setIsComposerFocused(true));
+        flushSync(() => markComposerFocused());
         const shell = composerFormRef.current?.closest('[data-slot="composer-shell"]');
         const trigger = Array.from(
           shell?.querySelectorAll<HTMLButtonElement>(
@@ -3184,7 +3182,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
           window.cancelAnimationFrame(composerBlurFrameRef.current);
           composerBlurFrameRef.current = null;
         }
-        setIsComposerFocused(true);
+        markComposerFocused();
       }}
       onBlurCapture={(event) => {
         if (

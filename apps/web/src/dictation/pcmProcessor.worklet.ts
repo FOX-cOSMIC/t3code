@@ -1,13 +1,8 @@
 /**
- * Audio-thread half of `PcmCapture`, loaded with `audioWorklet.addModule`.
- * Box-filters the device rate down to the target rate (or holds samples when
- * the device is slower), packs little-endian int16, and transfers one
- * ArrayBuffer per frame. About 25 times a second it also posts the input
- * level as a number from 0 to 1. A "flush" message posts the partial frame
- * and answers "flushed".
- *
- * Bundled as its own file so it loads under the desktop app's `script-src
- * 'self'` policy, which rejects blob: modules.
+ * Audio-thread half of `PcmCapture`, loaded with `audioWorklet.addModule`. It packs the device
+ * rate down to 16 kHz little-endian int16, sends one ArrayBuffer per frame, and posts the level
+ * about 25 times a second. A "flush" message sends the partial frame, then answers "flushed".
+ * It is its own file because the desktop app's `script-src 'self'` policy rejects blob: modules.
  */
 
 const LEVELS_PER_SECOND = 25;
