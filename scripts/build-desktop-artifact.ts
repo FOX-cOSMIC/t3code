@@ -2679,6 +2679,23 @@ export function resolveDesktopRuntimeDependencies(
   );
 }
 
+// An update URL names a feed outside the GitHub repository, such as the rolling release the Mac build
+// is published to. It wins over the repository, which serves the Windows releases.
+export const resolveGenericUpdateFeed = Effect.fn("resolveGenericUpdateFeed")(function* () {
+  const url = yield* Config.String("T3CODE_DESKTOP_UPDATE_URL").pipe(Config.option);
+  const trimmed = Option.getOrUndefined(url)?.trim();
+  return trimmed ? { provider: "generic", url: trimmed } : undefined;
+});
+
+// The release notes the update popover shows: the text of the file the build names, if any.
+export const resolveReleaseNotes = Effect.fn("resolveReleaseNotes")(function* () {
+  const file = yield* Config.String("T3CODE_DESKTOP_RELEASE_NOTES_FILE").pipe(Config.option);
+  const filePath = Option.getOrUndefined(file)?.trim();
+  if (!filePath) return undefined;
+  const fs = yield* FileSystem.FileSystem;
+  return (yield* fs.readFileString(filePath)).trim();
+});
+
 export const resolveGitHubPublishConfig = Effect.fn("resolveGitHubPublishConfig")(function* (
   updateChannel: "latest" | "nightly",
 ) {
@@ -2802,7 +2819,8 @@ export const createBuildConfig = Effect.fn("createBuildConfig")(function* (
   // Missing publish config infers a GitHub feed from tokens; staging has no repository, so manifest generation would crash.
   buildConfig.publish = null;
   if (!isDesktopPreviewVersion(version)) {
-    const publishConfig = yield* resolveGitHubPublishConfig(updateChannel);
+    const publishConfig =
+      (yield* resolveGenericUpdateFeed()) ?? (yield* resolveGitHubPublishConfig(updateChannel));
     if (publishConfig) {
       buildConfig.publish = [publishConfig];
     } else if (mockUpdates) {
@@ -2814,6 +2832,10 @@ export const createBuildConfig = Effect.fn("createBuildConfig")(function* (
       ];
     }
   }
+
+  // electron-builder writes these notes into latest*.yml, where the updater reads them.
+  const releaseNotes = yield* resolveReleaseNotes();
+  if (releaseNotes !== undefined) buildConfig.releaseInfo = { releaseNotes };
 
   if (platform === "mac") {
     const path = yield* Path.Path;

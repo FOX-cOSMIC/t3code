@@ -496,6 +496,48 @@ it.layer(NodeServices.layer)("build-desktop-artifact", (it) => {
     }),
   );
 
+  it.effect("feeds a Mac build from its update URL and carries the release notes file", () =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const root = yield* fs.makeTempDirectoryScoped({ prefix: "t3-release-notes-" });
+      const notesPath = path.join(root, "summary.md");
+      yield* fs.writeFileString(
+        notesPath,
+        "**v0.1.6-voice.20261030.8** · 2 changes\n\nDictation works offline.\n",
+      );
+      const feedUrl = "https://github.com/FOX-cOSMIC/t3code/releases/download/voice-mac/";
+
+      const config = yield* createBuildConfig(
+        "mac",
+        "zip",
+        "0.1.6-voice.20261030.8",
+        false,
+        false,
+        undefined,
+        undefined,
+      ).pipe(
+        Effect.provide(
+          ConfigProvider.layer(
+            ConfigProvider.fromEnv({
+              env: {
+                // The GitHub repository is set too: the update URL must win over it.
+                GITHUB_REPOSITORY: "FOX-cOSMIC/t3code",
+                T3CODE_DESKTOP_UPDATE_URL: feedUrl,
+                T3CODE_DESKTOP_RELEASE_NOTES_FILE: notesPath,
+              },
+            }),
+          ),
+        ),
+      );
+
+      assert.deepStrictEqual(config.publish, [{ provider: "generic", url: feedUrl }]);
+      assert.deepStrictEqual(config.releaseInfo, {
+        releaseNotes: "**v0.1.6-voice.20261030.8** · 2 changes\n\nDictation works offline.",
+      });
+    }).pipe(Effect.scoped),
+  );
+
   it.effect("omits update feeds for pull request preview builds", () =>
     Effect.gen(function* () {
       const preview = yield* createBuildConfig(

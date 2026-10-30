@@ -7,6 +7,9 @@ name: Voice build (Windows)
 # Versions are <server version, patch+1>-voice.<date>.<run>: increasing, and
 # without "-nightly" so the product name and channel stay those of the
 # installed "T3 Code (Beta)".
+# The release body is the change summary the Mac's daily run wrote for this
+# commit (a notes-<sha>.md asset of the voice-mac release, uploaded before the
+# push). The updater shows that body as the update's notes.
 
 on:
   push:
@@ -74,6 +77,28 @@ jobs:
           echo "version=$version" >> "$GITHUB_OUTPUT"
           echo "Building $version"
 
+      - name: Fetch the change summary
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          set -euo pipefail
+          notes=release-notes.md
+          # The Mac's daily run uploads notes-<commit>.md to the voice-mac release before it pushes.
+          if gh release download voice-mac --repo "$GITHUB_REPOSITORY" \
+              --pattern "notes-$GITHUB_SHA.md" --output "$notes" --clobber 2>/dev/null; then
+            # The Mac's version number differs from this run's, so the header takes this build's.
+            sed "1s/^\*\*v[^*]*\*\*/**v$VERSION**/" "$notes" > "$notes.new"
+            mv "$notes.new" "$notes"
+            echo "Using the change summary for $GITHUB_SHA"
+          else
+            printf '**v%s**\n\nUpstream main %s plus dictation PR #19273.\n' \
+              "$VERSION" "$(git rev-parse --short HEAD)" > "$notes"
+            echo "No change summary for $GITHUB_SHA on voice-mac; using the fallback"
+          fi
+          printf '\nUnsigned: Windows SmartScreen warns on the first manual install.\n' >> "$notes"
+
       - name: Align package versions
         run: node scripts/update-release-package-versions.ts "${{ steps.version.outputs.version }}"
 
@@ -98,5 +123,5 @@ jobs:
             --repo "$GITHUB_REPOSITORY" \
             --target "$GITHUB_SHA" \
             --title "T3 Code $VERSION (with dictation)" \
-            --notes "Upstream main $(git log -1 --format=%h) + dictation PR #19273. Unsigned: Windows SmartScreen warns on the first manual install." \
+            --notes-file release-notes.md \
             --latest
