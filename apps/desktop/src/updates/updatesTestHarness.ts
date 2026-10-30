@@ -14,6 +14,7 @@ import * as ElectronWindow from "../electron/ElectronWindow.ts";
 import * as DesktopAppSettings from "../settings/DesktopAppSettings.ts";
 import * as DesktopState from "../app/DesktopState.ts";
 import * as DesktopUpdates from "./DesktopUpdates.ts";
+import * as UserDataBackup from "./userDataBackup.ts";
 
 export const flushCallbacks = Effect.yieldNow;
 
@@ -29,6 +30,10 @@ export interface UpdatesHarnessOptions {
   readonly quitAndInstall?: Effect.Effect<void, ElectronUpdater.ElectronUpdaterQuitAndInstallError>;
   readonly stopBackend?: Effect.Effect<void>;
   readonly startBackend?: Effect.Effect<void>;
+  readonly backupBeforeInstall?: Effect.Effect<
+    Option.Option<string>,
+    UserDataBackup.UserDataBackupError
+  >;
   readonly backendDesiredRunning?: boolean;
   readonly backendInstances?: ReadonlyArray<DesktopBackendPool.DesktopBackendInstance>;
   readonly env?: Record<string, string | undefined>;
@@ -269,8 +274,18 @@ export function makeHarness(options: UpdatesHarnessOptions = {}) {
       }),
   });
 
+  const layerBackup = Layer.succeed(UserDataBackup.UserDataBackup, {
+    backupBeforeInstall: Effect.fn("UserDataBackup.backupBeforeInstall")(
+      function* (_targetVersion) {
+        installSteps.push("backup");
+        return yield* options.backupBeforeInstall ?? Effect.succeedNone;
+      },
+    ),
+  });
+
   const layer = DesktopUpdates.layer.pipe(
     Layer.provide(layerFileSystem),
+    Layer.provide(layerBackup),
     Layer.provideMerge(layerUpdater),
     Layer.provideMerge(layerWindow),
     Layer.provideMerge(layerBackend),
