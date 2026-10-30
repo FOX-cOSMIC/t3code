@@ -26,12 +26,19 @@ export function getDesktopUpdateDownloadedVersion(state: DesktopUpdateState): st
   return state.downloadedVersion ?? state.availableVersion;
 }
 
+// A voice build (<version>-voice.<date>.<n>) has no release tagged v<version>: the Windows release
+// is tagged voice-<version>, and the Mac build is one rolling release. Both link to the release list.
+const VOICE_BUILD_VERSION = /-voice\./;
+
 export function getDesktopUpdateReleaseUrl(
   version: string | null,
   repository: string | undefined = import.meta.env.T3CODE_DESKTOP_UPDATE_REPOSITORY,
 ): string | null {
   const normalizedVersion = version?.trim();
   if (!normalizedVersion) return null;
+  if (VOICE_BUILD_VERSION.test(normalizedVersion)) {
+    return getDesktopUpdateReleaseHistoryUrl(repository);
+  }
   return `${desktopReleaseRepositoryUrl(repository)}/tag/v${encodeURIComponent(normalizedVersion)}`;
 }
 
@@ -121,10 +128,18 @@ export function getDesktopUpdateButtonTooltip(state: DesktopUpdateState): string
 }
 
 export function getDesktopUpdateInstallConfirmationMessage(
-  state: Pick<DesktopUpdateState, "availableVersion" | "downloadedVersion">,
+  state: Pick<DesktopUpdateState, "availableVersion" | "downloadedVersion"> &
+    Partial<Pick<DesktopUpdateState, "releaseNotes">>,
 ): string {
   const version = state.downloadedVersion ?? state.availableVersion;
-  return `Install update${version ? ` ${version}` : ""} and restart T3 Code?\n\nAny running tasks will be interrupted. Make sure you're ready before continuing.`;
+  const highlights = version
+    ? state.releaseNotes?.find((note) => note.version === version)?.intro
+    : undefined;
+  return [
+    `Install update${version ? ` ${version}` : ""} and restart T3 Code?`,
+    ...(highlights ? [highlights] : []),
+    "Any running tasks will be interrupted. Make sure you're ready before continuing.",
+  ].join("\n\n");
 }
 
 export function getDesktopUpdateActionError(result: DesktopUpdateActionResult): string | null {

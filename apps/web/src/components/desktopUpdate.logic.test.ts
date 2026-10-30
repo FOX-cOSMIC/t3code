@@ -4,6 +4,7 @@ import type { DesktopUpdateState } from "@t3tools/contracts";
 import {
   canCheckForUpdate,
   getDesktopUpdateButtonTooltip,
+  getDesktopUpdateInstallConfirmationMessage,
   getDesktopUpdateReleaseHistoryUrl,
   getDesktopUpdateReleaseUrl,
   resolveDesktopUpdateButtonAction,
@@ -76,6 +77,47 @@ describe("desktop update UI helpers", () => {
       );
     },
   );
+});
+
+describe("voice builds", () => {
+  it("links to the fork's release list, because a voice build has no shared tag", () => {
+    expect(getDesktopUpdateReleaseUrl("0.1.6-voice.20261030.8", "FOX-cOSMIC/t3code")).toBe(
+      "https://github.com/FOX-cOSMIC/t3code/releases",
+    );
+  });
+});
+
+describe("getDesktopUpdateInstallConfirmationMessage", () => {
+  it("shows the highlights of the version being installed", () => {
+    expect(
+      getDesktopUpdateInstallConfirmationMessage({
+        availableVersion: "1.1.0",
+        downloadedVersion: "1.1.0",
+        releaseNotes: [
+          {
+            version: "1.1.0",
+            items: ["Fix."],
+            totalItems: 1,
+            intro: "Dictation now works offline.",
+          },
+        ],
+      }),
+    ).toBe(
+      "Install update 1.1.0 and restart T3 Code?\n\nDictation now works offline.\n\nAny running tasks will be interrupted. Make sure you're ready before continuing.",
+    );
+  });
+
+  it("keeps the plain message when the update has no highlights", () => {
+    expect(
+      getDesktopUpdateInstallConfirmationMessage({
+        availableVersion: "1.1.0",
+        downloadedVersion: null,
+        releaseNotes: [{ version: "1.1.0", items: ["Fix."], totalItems: 1 }],
+      }),
+    ).toBe(
+      "Install update 1.1.0 and restart T3 Code?\n\nAny running tasks will be interrupted. Make sure you're ready before continuing.",
+    );
+  });
 });
 
 describe("canCheckForUpdate", () => {

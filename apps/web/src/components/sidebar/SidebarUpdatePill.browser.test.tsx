@@ -105,6 +105,24 @@ describe("SidebarUpdatePill release notes", () => {
   });
 });
 
+describe("SidebarUpdatePill release notes on click", () => {
+  it("keeps the release notes open after the update button is clicked and the pointer moves away", async () => {
+    setup(nightlyUpdate(RELEASE_NOTES));
+    await using screen = await render(<SidebarUpdatePill />);
+    await userEvent.click(
+      screen.getByRole("button", { name: "Update 0.0.50-nightly.2 ready to download" }),
+    );
+    await vi.waitFor(() => expect(releaseNotes()).not.toBeNull());
+
+    await userEvent.hover(document.body);
+    // An unpinned popover closes once the pointer leaves; a pinned one must not close in that time.
+    await expect(
+      vi.waitFor(() => expect(releaseNotes()).toBeNull(), { timeout: 600, interval: 50 }),
+    ).rejects.toThrow();
+    expect(releaseNotes()).not.toBeNull();
+  });
+});
+
 describe("SidebarUpdatePill update everything", () => {
   it("does not refocus the update button after a pointer cancel", async () => {
     setup(null, { hasUpdates: true });

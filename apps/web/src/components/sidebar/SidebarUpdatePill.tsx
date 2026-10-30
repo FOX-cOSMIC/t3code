@@ -261,6 +261,8 @@ function SidebarUpdateControl() {
     !isRunningEverything && shouldUseSidebarUpdateReleaseNotesPopover(showUpdateDetails, state);
 
   const [releaseNotesOpen, setReleaseNotesOpen] = useState(false);
+  // A click on the button pins the notes open: leaving the button does not close them.
+  const [releaseNotesPinned, setReleaseNotesPinned] = useState(false);
   const [releaseNotesTriggerFocusVisible, setReleaseNotesTriggerFocusVisible] = useState(false);
   // Release notes close when they stop applying, and open when they start
   // applying while the trigger already holds keyboard focus.
@@ -268,6 +270,7 @@ function SidebarUpdateControl() {
   if (releaseNotesShownBefore !== showReleaseNotesPopover) {
     setReleaseNotesShownBefore(showReleaseNotesPopover);
     setReleaseNotesOpen(showReleaseNotesPopover && releaseNotesTriggerFocusVisible);
+    setReleaseNotesPinned(false);
   }
 
   const handleAction = async () => {
@@ -277,6 +280,12 @@ function SidebarUpdateControl() {
     if (runsEverything) {
       setIsConfirmingEverything(true);
       return;
+    }
+
+    // A click shows what the update changes; the notes stay open until the user dismisses them.
+    if (showReleaseNotesPopover) {
+      setReleaseNotesPinned(true);
+      setReleaseNotesOpen(true);
     }
 
     if (!bridge || !state) return;
@@ -498,8 +507,14 @@ function SidebarUpdateControl() {
             details.cancel();
             return;
           }
+          if (!open && releaseNotesPinned && details.reason === "trigger-hover") {
+            details.cancel();
+            return;
+          }
           handleSidebarUpdateReleaseNotesPopoverOpenChange(open, details);
-          if (!details.isCanceled) setReleaseNotesOpen(open);
+          if (details.isCanceled) return;
+          if (!open) setReleaseNotesPinned(false);
+          setReleaseNotesOpen(open);
         }}
       >
         <Tooltip disabled={showReleaseNotesPopover}>
