@@ -6,7 +6,7 @@ name: Voice build (Windows)
 # installed app's updater follows (app-update.yml points at this repository).
 # Versions are <server version, patch+1>-voice.<date>.<run>: increasing, and
 # without "-nightly" so the product name and channel stay those of the
-# installed "T3 Code (Beta)".
+# installed "FOX-cOSMIC-t3".
 # The release body is the change summary the Mac's daily run wrote for this
 # commit (a notes-<sha>.md asset of the voice-mac release, uploaded before the
 # push). The updater shows that body as the update's notes.
