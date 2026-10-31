@@ -283,6 +283,47 @@ describe("scan cache round trip", () => {
     });
   });
 
+  it("drops an entry whose one-hour count is not a whole number within the cache writes", () => {
+    const original = cacheWith([["/claude.jsonl", 100, [record({ cacheCreation1hTokens: 4 })]]]);
+    const hasEntry = (document: unknown) =>
+      decodeScanCache(document, TEST_FORMAT_MAP).has("/claude.jsonl");
+
+    expect(hasEntry(JSON.parse(makeScanCacheWriter()(original, {})))).toBe(true);
+    for (const oneHour of [-1, 1.5, 11]) {
+      const document = JSON.parse(makeScanCacheWriter()(original, {}));
+      document.files["/claude.jsonl"].r[0][13] = oneHour;
+      expect(hasEntry(document)).toBe(false);
+    }
+  });
+
+  it("decodes version 10 rows of eleven, twelve, and thirteen columns", () => {
+    const original = cacheWith([
+      ["/a.jsonl", 100, [record({ dedupeKey: "a:" })]],
+      ["/b.jsonl", 100, [record({ dedupeKey: "b:" })]],
+      ["/c.jsonl", 100, [record({ dedupeKey: "c:", unresolvedServiceTierTurnId: "turn-1" })]],
+    ]);
+    const document = JSON.parse(makeScanCacheWriter()(original, {}));
+    // Version 10 rows had no one-hour column. The unresolved turn id came last, and only when set.
+    document.version = 10;
+    document.files["/a.jsonl"].r = document.files["/a.jsonl"].r.map((row: unknown[]) =>
+      row.slice(0, 11),
+    );
+    document.files["/b.jsonl"].r = document.files["/b.jsonl"].r.map((row: unknown[]) =>
+      row.slice(0, 12),
+    );
+    document.files["/c.jsonl"].r = document.files["/c.jsonl"].r.map((row: unknown[]) => [
+      ...row.slice(0, 12),
+      "turn-1",
+    ]);
+
+    const restored = decodeScanCache(document, TEST_FORMAT_MAP);
+    expect(restored.get("/a.jsonl")?.records).toEqual([record({ dedupeKey: "a:" })]);
+    expect(restored.get("/b.jsonl")?.records).toEqual([record({ dedupeKey: "b:" })]);
+    expect(restored.get("/c.jsonl")?.records).toEqual([
+      record({ dedupeKey: "c:", unresolvedServiceTierTurnId: "turn-1" }),
+    ]);
+  });
+
   it("rewrites only changed entries and still restores the whole cache", () => {
     const write = makeScanCacheWriter();
     const cache = cacheWith([

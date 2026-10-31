@@ -100,8 +100,8 @@ function readTokenPrices(
   };
 }
 
-// LiteLLM spells prompt tiers as input_cost_per_token[<speed suffix>]_above_<N>k_tokens.
-const PROMPT_TIER_KEY = /^input_cost_per_token(.*)_above_(\d+)k_tokens$/;
+// LiteLLM spells prompt tiers as input_cost_per_token_above_<N>k_tokens, speed suffix last.
+const PROMPT_TIER_KEY = /^input_cost_per_token_above_(\d+)k_tokens(_priority|_ultrafast)?$/;
 // The 272k tier stays omitted, as described on ModelRate.
 const OMITTED_PROMPT_TIER_KILOTOKENS = 272;
 
@@ -113,10 +113,10 @@ function readPromptTiers(
   const tiers: PromptTier[] = [];
   for (const key of Object.keys(entry)) {
     const match = PROMPT_TIER_KEY.exec(key);
-    if (match === null || match[1] !== speedSuffix) continue;
-    const kilotokens = Number(match[2]);
+    if (match === null || (match[2] ?? "") !== speedSuffix) continue;
+    const kilotokens = Number(match[1]);
     if (kilotokens === OMITTED_PROMPT_TIER_KILOTOKENS) continue;
-    const prices = readTokenPrices(entry, `${speedSuffix}_above_${kilotokens}k_tokens`, base);
+    const prices = readTokenPrices(entry, `_above_${kilotokens}k_tokens${speedSuffix}`, base);
     if (prices !== null) tiers.push({ aboveTokens: kilotokens * 1_000, prices });
   }
   return tiers.sort((a, b) => a.aboveTokens - b.aboveTokens);
@@ -211,10 +211,10 @@ function samePrices(a: TokenPrices, b: TokenPrices): boolean {
   );
 }
 
-function sameTokenRates(a: TokenRates | null, b: TokenRates | null): boolean {
-  if (a === null || b === null) return a === b;
+// An entry with no tiers agrees with any tiers; the other entry supplies them.
+function sameTiers(a: TokenRates, b: TokenRates): boolean {
+  if (a.promptTiers.length === 0 || b.promptTiers.length === 0) return true;
   return (
-    samePrices(a, b) &&
     a.promptTiers.length === b.promptTiers.length &&
     a.promptTiers.every((tier, index) => {
       const other = b.promptTiers[index];
@@ -227,7 +227,17 @@ function sameTokenRates(a: TokenRates | null, b: TokenRates | null): boolean {
   );
 }
 
-// Resellers often omit speed tiers, so a missing tier fills from the other entry instead of conflicting.
+function sameTokenRates(a: TokenRates | null, b: TokenRates | null): boolean {
+  if (a === null || b === null) return a === b;
+  return samePrices(a, b) && sameTiers(a, b);
+}
+
+function withPromptTiers<T extends TokenRates>(rates: T, other: TokenRates | null): T {
+  if (other === null || rates.promptTiers.length > 0) return rates;
+  return { ...rates, promptTiers: other.promptTiers };
+}
+
+// Resellers often omit tiers, so a missing tier fills from the other entry instead of conflicting.
 function mergeAliasRate(a: ModelRate, b: ModelRate): ModelRate | null {
   const fast = a.fast ?? b.fast;
   const ultrafast = a.ultrafast ?? b.ultrafast;
@@ -238,7 +248,11 @@ function mergeAliasRate(a: ModelRate, b: ModelRate): ModelRate | null {
   ) {
     return null;
   }
-  return { ...a, fast, ultrafast };
+  return {
+    ...withPromptTiers(a, b),
+    fast: fast === null ? null : withPromptTiers(fast, b.fast),
+    ultrafast: ultrafast === null ? null : withPromptTiers(ultrafast, b.ultrafast),
+  };
 }
 
 function ratesAt(rate: ModelRate, speed: UsageSpeed): TokenRates {

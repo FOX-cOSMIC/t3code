@@ -224,7 +224,10 @@ export function decodeScanCache(
         !Number.isFinite(timestampMs) ||
         model === undefined ||
         (unresolvedServiceTierTurnId != null && typeof unresolvedServiceTierTurnId !== "string") ||
-        (cacheCreation1hTokens !== undefined && !Number.isFinite(cacheCreation1hTokens)) ||
+        (cacheCreation1hTokens !== undefined &&
+          (!Number.isSafeInteger(cacheCreation1hTokens) ||
+            cacheCreation1hTokens < 0 ||
+            cacheCreation1hTokens > cacheCreation)) ||
         (rateModelIndex != null && rateModel === undefined) ||
         !Number.isFinite(uncached) ||
         !Number.isFinite(cached) ||

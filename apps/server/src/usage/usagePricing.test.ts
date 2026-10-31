@@ -295,12 +295,12 @@ describe("usage pricing", () => {
     it("prices every token type at the long-prompt rates when the prompt is over 100,000 tokens", () => {
       // Prompt of 150,000 tokens: 50,000 + 90,000 + 10,000.
       expect(priceUsage(haikuTable, request(50_000, 90_000, 10_000, 1_000))).toMatchObject({
-        costUsd: expect.closeTo(0.03825),
+        costUsd: expect.closeTo(0.03825, 10),
         categoryCostUsd: {
-          input: expect.closeTo(0.025),
-          cacheRead: expect.closeTo(0.0045),
-          cacheWrite: expect.closeTo(0.00625),
-          output: expect.closeTo(0.0025),
+          input: expect.closeTo(0.025, 10),
+          cacheRead: expect.closeTo(0.0045, 10),
+          cacheWrite: expect.closeTo(0.00625, 10),
+          output: expect.closeTo(0.0025, 10),
         },
       });
     });
@@ -308,15 +308,17 @@ describe("usage pricing", () => {
     it("keeps base rates at exactly 100,000 prompt tokens and switches one token above", () => {
       expect(priceUsage(haikuTable, request(40_000, 50_000, 10_000, 1_000)).costUsd).toBeCloseTo(
         0.00625,
+        10,
       );
       expect(priceUsage(haikuTable, request(40_001, 50_000, 10_000, 1_000)).costUsd).toBeCloseTo(
         0.0312505,
+        10,
       );
     });
 
     it("applies the same prompt tier to cache savings", () => {
-      expect(cacheSavingsUsd(haikuTable, request(60_000, 90_000, 0, 0))).toBeCloseTo(0.0405);
-      expect(cacheSavingsUsd(haikuTable, request(10_000, 90_000, 0, 0))).toBeCloseTo(0.0081);
+      expect(cacheSavingsUsd(haikuTable, request(60_000, 90_000, 0, 0))).toBeCloseTo(0.0405, 10);
+      expect(cacheSavingsUsd(haikuTable, request(10_000, 90_000, 0, 0))).toBeCloseTo(0.0081, 10);
     });
 
     it("scales the long-prompt rates by the fast multiple", () => {
@@ -326,7 +328,7 @@ describe("usage pricing", () => {
 
       expect(
         priceUsage(fastTable, request(50_000, 90_000, 10_000, 1_000, "fast")).costUsd,
-      ).toBeCloseTo(2 * 0.03825);
+      ).toBeCloseTo(2 * 0.03825, 10);
     });
 
     it("keeps omitting the 272k tier", () => {
@@ -354,6 +356,65 @@ describe("usage pricing", () => {
       });
 
       expect(lookupRate(table, "example-model")).toBeNull();
+    });
+
+    it("keeps a bare alias when a reseller entry omits a prompt tier", () => {
+      const table = parseRateTable({
+        "provider-a/example-model": haikuPrices,
+        "provider-b/example-model": {
+          input_cost_per_token: 1e-7,
+          output_cost_per_token: 5e-7,
+          cache_read_input_token_cost: 1e-8,
+          cache_creation_input_token_cost: 1.25e-7,
+        },
+      });
+
+      expect(lookupRate(table, "example-model")).toEqual(
+        lookupRate(table, "provider-a/example-model"),
+      );
+    });
+
+    it("prices priority requests above a prompt tier at the priority tier rates", () => {
+      const table = parseRateTable({
+        "gemini-example": {
+          input_cost_per_token: 1.25e-6,
+          output_cost_per_token: 1e-5,
+          input_cost_per_token_above_200k_tokens: 2.5e-6,
+          output_cost_per_token_above_200k_tokens: 1.5e-5,
+          input_cost_per_token_priority: 2.25e-6,
+          output_cost_per_token_priority: 1.8e-5,
+          input_cost_per_token_above_200k_tokens_priority: 4.5e-6,
+          output_cost_per_token_above_200k_tokens_priority: 2.7e-5,
+        },
+      });
+      const priced = (speed: UsageSpeed) =>
+        priceUsage(table, {
+          model: "gemini-example",
+          totals: {
+            uncachedInputTokens: 300_000,
+            cachedInputTokens: 0,
+            cacheCreationTokens: 0,
+            outputTokens: 1_000,
+            reasoningTokens: 0,
+          },
+          reportedCostUsd: null,
+          speed,
+        }).costUsd;
+
+      expect(priced("standard")).toBeCloseTo(0.765, 10);
+      expect(priced("fast")).toBeCloseTo(1.377, 10);
+    });
+
+    it("prices the speed premium of a fast request above a prompt tier", () => {
+      const fastTable = parseRateTable({
+        "claude-haiku-5-5": { ...haikuPrices, provider_specific_entry: { fast: 2 } },
+      });
+
+      // The standard tier cost of this prompt is 0.03825, so the fast request costs 0.0765.
+      expect(priceUsage(fastTable, request(50_000, 90_000, 10_000, 1_000, "fast"))).toMatchObject({
+        costUsd: expect.closeTo(0.0765, 10),
+        speedPremiumUsd: expect.closeTo(0.03825, 10),
+      });
     });
   });
 
@@ -432,6 +493,23 @@ describe("usage pricing", () => {
 
     it("prices a request without a one-hour split at the five-minute rate", () => {
       expect(priceUsage(haikuTable, writes(50_000)).costUsd).toBeCloseTo(0.00625, 10);
+    });
+
+    it("uses the tier's five-minute rate for one-hour writes above a tier with no one-hour rate", () => {
+      const table = parseRateTable({
+        "claude-haiku-5-5": {
+          input_cost_per_token: 1e-7,
+          output_cost_per_token: 5e-7,
+          cache_creation_input_token_cost: 1.25e-7,
+          cache_creation_input_token_cost_above_1hr: 2e-7,
+          input_cost_per_token_above_100k_tokens: 5e-7,
+          output_cost_per_token_above_100k_tokens: 2.5e-6,
+          cache_creation_input_token_cost_above_100k_tokens: 6.25e-7,
+        },
+      });
+
+      // 1,000,000 one-hour writes are over the tier, and the tier publishes no one-hour rate.
+      expect(priceUsage(table, writes(1_000_000, 1_000_000)).costUsd).toBeCloseTo(0.625, 10);
     });
   });
 });

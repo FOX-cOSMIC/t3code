@@ -86,6 +86,29 @@ function claudeLine(
   })}\n`;
 }
 
+// A Claude line whose cache writes split between five-minute and one-hour storage.
+function claudeCacheLine(id: number, cacheWrites: number, oneHour: number): string {
+  return `${JSON.stringify({
+    type: "assistant",
+    timestamp: "2026-08-01T10:00:00Z",
+    requestId: `req_${id}`,
+    sessionId: "session-1",
+    message: {
+      id: `msg_${id}`,
+      model: "claude-fable-5",
+      usage: {
+        input_tokens: 0,
+        output_tokens: 0,
+        cache_creation_input_tokens: cacheWrites,
+        cache_creation: {
+          ephemeral_5m_input_tokens: cacheWrites - oneHour,
+          ephemeral_1h_input_tokens: oneHour,
+        },
+      },
+    },
+  })}\n`;
+}
+
 const WINDOW: UsageSummaryInput = {
   timeZone: "UTC",
   sinceDay: UsageDay.make("2026-07-31"),
@@ -2266,6 +2289,72 @@ describe("UsageService", () => {
               settings,
               ratesDocument: {
                 "claude-fable-5": { input_cost_per_token: 1e-5, output_cost_per_token: 5e-5 },
+              },
+            }),
+          ),
+        );
+      }).pipe(Effect.scoped),
+  );
+
+  it.live(
+    "upgrades a v10 cache: reparses a live Claude transcript for its one-hour writes and keeps a deleted one at the five-minute rate",
+    () =>
+      Effect.gen(function* () {
+        const { home, transcript, settings } = yield* setup;
+        const deleted = NodePath.join(NodePath.dirname(transcript), "deleted.jsonl");
+        yield* Effect.promise(async () => {
+          await NodeFSP.writeFile(transcript, claudeCacheLine(1, 1_000_000, 400_000));
+          await NodeFSP.writeFile(deleted, claudeCacheLine(2, 1_000_000, 400_000));
+        });
+
+        yield* Effect.gen(function* () {
+          const { stateDir } = yield* ServerConfig.ServerConfig;
+          const cachePath = NodePath.join(stateDir, SCAN_CACHE_FILE_NAME);
+          const legacyPath = NodePath.join(stateDir, "usage-scan-cache-v10.json");
+          const first = yield* UsageService.make;
+          yield* first.readSummary(WINDOW);
+          yield* first.awaitPersisted;
+
+          const legacy = yield* Effect.promise(async () => {
+            const document = decodeUnknownJsonString(await NodeFSP.readFile(cachePath, "utf8")) as {
+              files: Record<string, { r: unknown[][]; t: unknown[][] }>;
+            };
+            // Version 10 rows end before the one-hour column.
+            for (const file of Object.values(document.files)) {
+              file.r = file.r.map((row) => row.slice(0, 12));
+              file.t = file.t.map((row) => row.slice(0, 12));
+            }
+            const text = encodeUnknownJsonString({ ...document, version: 10 });
+            await NodeFSP.rm(cachePath);
+            await NodeFSP.writeFile(legacyPath, text);
+            await NodeFSP.rm(deleted);
+            return text;
+          });
+
+          const upgraded = yield* UsageService.make;
+          const summary = yield* upgraded.readSummary(WINDOW);
+          // Live: 600,000 five-minute writes at 1e-5 and 400,000 one-hour writes at 2e-5, so 14 USD.
+          // Deleted: 1,000,000 writes at the five-minute rate, so 10 USD.
+          const cost = summary.buckets.reduce((sum, bucket) => sum + bucket.costUsd, 0);
+          assert.ok(Math.abs(cost - 24) < 1e-9, `expected 24 USD, got ${cost}`);
+          yield* upgraded.awaitPersisted;
+          assert.strictEqual(
+            yield* Effect.promise(() => NodeFSP.readFile(legacyPath, "utf8")),
+            legacy,
+          );
+        }).pipe(
+          Effect.provide(
+            layerService({
+              prefix: "usage-service-claude-one-hour-upgrade-test",
+              home,
+              settings,
+              ratesDocument: {
+                "claude-fable-5": {
+                  input_cost_per_token: 1e-5,
+                  output_cost_per_token: 5e-5,
+                  cache_creation_input_token_cost: 1e-5,
+                  cache_creation_input_token_cost_above_1hr: 2e-5,
+                },
               },
             }),
           ),
