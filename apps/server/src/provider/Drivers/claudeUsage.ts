@@ -56,6 +56,7 @@ function parseClaudeRecord(parsed: unknown): readonly UsageRecord[] {
     messageId === null && requestId === null ? null : `${messageId ?? ""}:${requestId ?? ""}`;
 
   const cost = record["costUSD"];
+  const cacheCreation1hTokens = oneHourCacheWrites(usageRecord);
 
   const executor: UsageRecord = {
     provider: "claude",
@@ -70,6 +71,7 @@ function parseClaudeRecord(parsed: unknown): readonly UsageRecord[] {
       // Anthropic folds thinking tokens into output and does not break them out.
       reasoningTokens: 0,
     },
+    ...(cacheCreation1hTokens > 0 ? { cacheCreation1hTokens } : {}),
     reportedCostUsd: typeof cost === "number" && Number.isFinite(cost) ? cost : null,
     speed: usageRecord["speed"] === "fast" ? "fast" : "standard",
     dedupeKey,
@@ -89,6 +91,7 @@ function parseClaudeRecord(parsed: unknown): readonly UsageRecord[] {
     const advisorModel = typeof advisor["model"] === "string" ? advisor["model"] : "";
     if (advisorModel.length === 0 || advisorModel === CLAUDE_SYNTHETIC_MODEL) continue;
 
+    const advisorOneHour = oneHourCacheWrites(advisor);
     records.push({
       provider: "claude",
       timestampMs,
@@ -101,12 +104,24 @@ function parseClaudeRecord(parsed: unknown): readonly UsageRecord[] {
         outputTokens: tokenCount(advisor["output_tokens"]),
         reasoningTokens: 0,
       },
+      ...(advisorOneHour > 0 ? { cacheCreation1hTokens: advisorOneHour } : {}),
       reportedCostUsd: null,
       speed: executor.speed,
       dedupeKey: dedupeKey === null ? null : `${dedupeKey}:advisor:${index}`,
     });
   }
   return records;
+}
+
+// Anthropic reports the one-hour share of cache writes under `cache_creation`. Transcripts
+// from before that split omit it, so their writes stay at the five-minute rate.
+function oneHourCacheWrites(usage: Record<string, unknown>): number {
+  const split = usage["cache_creation"];
+  if (typeof split !== "object" || split === null) return 0;
+  return Math.min(
+    tokenCount((split as Record<string, unknown>)["ephemeral_1h_input_tokens"]),
+    tokenCount(usage["cache_creation_input_tokens"]),
+  );
 }
 
 export const claudeUsageFormat: TranscriptUsageFormat<void> = {

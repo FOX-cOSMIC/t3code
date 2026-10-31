@@ -216,3 +216,65 @@ describe("Claude advisor iterations", () => {
     expect(parse(unusable).map((record) => record.model)).toEqual(["claude-opus-5-5"]);
   });
 });
+
+describe("Claude one-hour cache writes", () => {
+  const parse = (usage: Record<string, unknown>) =>
+    parseClaudeLine(
+      JSON.stringify({
+        type: "assistant",
+        timestamp: "2026-10-22T01:31:11.984Z",
+        sessionId: "5a128faa-8253-489e-b935-6c08e8e670c0",
+        requestId: "req_1",
+        message: {
+          id: "msg_1",
+          model: "claude-haiku-5-5",
+          usage: { input_tokens: 2, cache_read_input_tokens: 0, output_tokens: 5, ...usage },
+        },
+      }),
+    );
+
+  it("reports the one-hour share of the cache writes", () => {
+    const [record] = parse({
+      cache_creation_input_tokens: 100,
+      cache_creation: { ephemeral_5m_input_tokens: 60, ephemeral_1h_input_tokens: 40 },
+    });
+
+    expect(record?.totals.cacheCreationTokens).toBe(100);
+    expect(record?.cacheCreation1hTokens).toBe(40);
+  });
+
+  it("leaves the one-hour share unset when the transcript has no split", () => {
+    const [record] = parse({ cache_creation_input_tokens: 100 });
+
+    expect(record?.cacheCreation1hTokens).toBeUndefined();
+  });
+
+  it("caps the one-hour share at the cache writes", () => {
+    const [record] = parse({
+      cache_creation_input_tokens: 100,
+      cache_creation: { ephemeral_1h_input_tokens: 150 },
+    });
+
+    expect(record?.cacheCreation1hTokens).toBe(100);
+  });
+
+  it("reports an advisor call's one-hour share on the advisor's own record", () => {
+    const [executor, advisor] = parse({
+      cache_creation_input_tokens: 100,
+      cache_creation: { ephemeral_5m_input_tokens: 100 },
+      iterations: [
+        {
+          type: "advisor_message",
+          model: "claude-opus-5-5",
+          input_tokens: 10,
+          cache_creation_input_tokens: 30,
+          cache_creation: { ephemeral_1h_input_tokens: 30, ephemeral_5m_input_tokens: 0 },
+          output_tokens: 5,
+        },
+      ],
+    });
+
+    expect(executor?.cacheCreation1hTokens).toBeUndefined();
+    expect(advisor?.cacheCreation1hTokens).toBe(30);
+  });
+});

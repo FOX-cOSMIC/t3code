@@ -261,6 +261,28 @@ describe("scan cache round trip", () => {
     });
   });
 
+  it("restores the one-hour share of Claude cache writes", () => {
+    const original = cacheWith([["/claude.jsonl", 100, [record({ cacheCreation1hTokens: 4 })]]]);
+
+    const restored = decodeScanCache(
+      JSON.parse(makeScanCacheWriter()(original, {})),
+      TEST_FORMAT_MAP,
+    );
+    expect(restored.get("/claude.jsonl")?.records).toEqual([record({ cacheCreation1hTokens: 4 })]);
+  });
+
+  it("re-parses a Claude transcript cached before the one-hour split was counted", () => {
+    const original = cacheWith([["/claude.jsonl", 100, [record()]]]);
+    const v10 = { ...JSON.parse(makeScanCacheWriter()(original, {})), version: 10 };
+
+    const restored = decodeScanCache(JSON.parse(JSON.stringify(v10)), TEST_FORMAT_MAP);
+    expect(restored.get("/claude.jsonl")).toEqual({
+      ...original.get("/claude.jsonl"),
+      size: -1,
+      position: { resumeOffset: 0, guardLength: 0, guardHash: 0, state: null },
+    });
+  });
+
   it("rewrites only changed entries and still restores the whole cache", () => {
     const write = makeScanCacheWriter();
     const cache = cacheWith([

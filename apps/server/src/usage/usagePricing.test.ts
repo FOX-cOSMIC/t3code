@@ -356,4 +356,82 @@ describe("usage pricing", () => {
       expect(lookupRate(table, "example-model")).toBeNull();
     });
   });
+
+  describe("one-hour cache writes", () => {
+    const haikuPrices = {
+      input_cost_per_token: 1e-7,
+      output_cost_per_token: 5e-7,
+      cache_read_input_token_cost: 1e-8,
+      cache_creation_input_token_cost: 1.25e-7,
+      cache_creation_input_token_cost_above_1hr: 2e-7,
+      input_cost_per_token_above_100k_tokens: 5e-7,
+      output_cost_per_token_above_100k_tokens: 2.5e-6,
+      cache_read_input_token_cost_above_100k_tokens: 5e-8,
+      cache_creation_input_token_cost_above_100k_tokens: 6.25e-7,
+      cache_creation_input_token_cost_above_1hr_above_100k_tokens: 1e-6,
+    };
+    const haikuTable = parseRateTable({ "claude-haiku-5-5": haikuPrices });
+    // A prompt made only of cache writes, `oneHour` of which were stored for one hour.
+    const writes = (
+      cacheCreationTokens: number,
+      oneHour?: number,
+      speed: UsageSpeed = "standard",
+    ) => ({
+      model: "claude-haiku-5-5",
+      totals: {
+        uncachedInputTokens: 0,
+        cachedInputTokens: 0,
+        cacheCreationTokens,
+        outputTokens: 0,
+        reasoningTokens: 0,
+      },
+      reportedCostUsd: null,
+      speed,
+      ...(oneHour === undefined ? {} : { cacheCreation1hTokens: oneHour }),
+    });
+
+    it("prices one-hour cache writes at the one-hour rate", () => {
+      expect(priceUsage(haikuTable, writes(50_000, 50_000)).costUsd).toBeCloseTo(0.01, 10);
+    });
+
+    it("prices the other cache writes at the five-minute rate", () => {
+      // 30,000 five-minute writes at 1.25e-7 and 20,000 one-hour writes at 2e-7.
+      expect(priceUsage(haikuTable, writes(50_000, 20_000))).toMatchObject({
+        costUsd: expect.closeTo(0.00775, 10),
+        categoryCostUsd: { cacheWrite: expect.closeTo(0.00775, 10) },
+      });
+    });
+
+    it("prices one-hour cache writes at the one-hour rate of the prompt tier", () => {
+      // 600,000 five-minute writes at 6.25e-7 and 400,000 one-hour writes at 1e-6.
+      expect(priceUsage(haikuTable, writes(1_000_000, 400_000))).toMatchObject({
+        costUsd: expect.closeTo(0.775, 10),
+        categoryCostUsd: { cacheWrite: expect.closeTo(0.775, 10) },
+      });
+    });
+
+    it("prices one-hour cache writes at the five-minute rate when there is no one-hour rate", () => {
+      const table = parseRateTable({
+        "claude-haiku-5-5": {
+          input_cost_per_token: 1e-7,
+          output_cost_per_token: 5e-7,
+          cache_creation_input_token_cost: 1.25e-7,
+        },
+      });
+
+      expect(priceUsage(table, writes(50_000, 50_000)).costUsd).toBeCloseTo(0.00625, 10);
+    });
+
+    it("scales one-hour cache writes by the fast multiple", () => {
+      const fastTable = parseRateTable({
+        "claude-haiku-5-5": { ...haikuPrices, provider_specific_entry: { fast: 2 } },
+      });
+
+      expect(priceUsage(fastTable, writes(50_000, 50_000, "fast")).costUsd).toBeCloseTo(0.02, 10);
+    });
+
+    it("prices a request without a one-hour split at the five-minute rate", () => {
+      expect(priceUsage(haikuTable, writes(50_000)).costUsd).toBeCloseTo(0.00625, 10);
+    });
+  });
 });

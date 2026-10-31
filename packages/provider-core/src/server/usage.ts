@@ -18,6 +18,11 @@ export interface UsageRecord {
   readonly rateModel?: string;
   readonly sessionId: string;
   readonly totals: UsageTokenTotals;
+  /**
+   * The part of `totals.cacheCreationTokens` that Anthropic stored for one hour, which costs more
+   * than the five-minute part. Absent when there is none.
+   */
+  readonly cacheCreation1hTokens?: number;
   readonly reportedCostUsd: number | null;
   readonly speed: UsageSpeed;
   readonly unresolvedServiceTierTurnId?: string;
