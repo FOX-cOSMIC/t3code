@@ -25,7 +25,7 @@ concurrency:
 
 jobs:
   build:
-    if: github.repository == 'FOX-cOSMIC/t3code'
+    if: github.repository == 'FOX-cOSMIC/FOX-cOSMIC-t3'
     runs-on: windows-latest
     timeout-minutes: 90
     env:
