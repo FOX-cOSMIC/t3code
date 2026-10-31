@@ -202,7 +202,6 @@ import {
 } from "./ComposerAttachmentStrip";
 import { ComposerPrimaryActions } from "./ComposerPrimaryActions";
 import { ComposerDictationControl } from "./ComposerDictationControl";
-import { BackgroundThreadContext } from "./backgroundThread";
 import { useComposerDictation } from "../../dictation/useComposerDictation";
 import { useDictationHoldShortcut } from "../../dictation/useDictationHoldShortcut";
 import { getTerminalFocusOwner } from "../../lib/terminalFocus";
@@ -1235,7 +1234,6 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
   const composerTextUnavailable =
     projectSelectionRequired || isChoiceOnlyPendingQuestion || activePendingIsResponding;
   // Background threads render a composer too; only the foreground one owns the shortcut.
-  const backgroundThread = use(BackgroundThreadContext);
   useDictationHoldShortcut({
     dictation,
     enabled: !composerTextUnavailable && !backgroundThread,
