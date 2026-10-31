@@ -7,11 +7,25 @@ import type {
 
 import type { UsageRecord, UsageSpeed } from "@t3tools/provider-core/server/usage";
 
-export interface TokenRates {
+export interface TokenPrices {
   readonly inputCostPerToken: number;
   readonly outputCostPerToken: number;
   readonly cacheReadCostPerToken: number;
   readonly cacheCreationCostPerToken: number;
+}
+
+/**
+ * Prices for requests whose prompt is over `aboveTokens`. The prompt counts uncached input,
+ * cache reads and cache writes together.
+ */
+export interface PromptTier {
+  readonly aboveTokens: number;
+  readonly prices: TokenPrices;
+}
+
+export interface TokenRates extends TokenPrices {
+  /** Sorted by `aboveTokens`. A prompt over several tiers pays the highest one it exceeds. */
+  readonly promptTiers: readonly PromptTier[];
 }
 
 /** Omits LiteLLM's above_272k_tokens, flex and batches variants, which transcripts do not record. */
@@ -37,6 +51,7 @@ export function createOverrideRateTable(
           (prices.cacheWriteCostPerMillionTokens ?? prices.inputCostPerMillionTokens) / 1_000_000,
         fast: null,
         ultrafast: null,
+        promptTiers: [],
       },
     ]),
   );
@@ -49,11 +64,11 @@ function finiteNumber(value: unknown): number | null {
 }
 
 // Missing cache rates fall back to input pricing; Anthropic normally discounts reads and charges extra for writes.
-function readTokenRates(
+function readTokenPrices(
   entry: LiteLlmEntry,
   suffix: string,
-  standard?: TokenRates,
-): TokenRates | null {
+  standard?: TokenPrices,
+): TokenPrices | null {
   const input = finiteNumber(entry[`input_cost_per_token${suffix}`]);
   const output = finiteNumber(entry[`output_cost_per_token${suffix}`]);
   if (input === null || output === null) return null;
@@ -73,12 +88,54 @@ function readTokenRates(
   };
 }
 
+// LiteLLM spells prompt tiers as input_cost_per_token[<speed suffix>]_above_<N>k_tokens.
+const PROMPT_TIER_KEY = /^input_cost_per_token(.*)_above_(\d+)k_tokens$/;
+// The 272k tier stays omitted, as described on ModelRate.
+const OMITTED_PROMPT_TIER_KILOTOKENS = 272;
+
+function readPromptTiers(
+  entry: LiteLlmEntry,
+  speedSuffix: string,
+  base: TokenPrices,
+): PromptTier[] {
+  const tiers: PromptTier[] = [];
+  for (const key of Object.keys(entry)) {
+    const match = PROMPT_TIER_KEY.exec(key);
+    if (match === null || match[1] !== speedSuffix) continue;
+    const kilotokens = Number(match[2]);
+    if (kilotokens === OMITTED_PROMPT_TIER_KILOTOKENS) continue;
+    const prices = readTokenPrices(entry, `${speedSuffix}_above_${kilotokens}k_tokens`, base);
+    if (prices !== null) tiers.push({ aboveTokens: kilotokens * 1_000, prices });
+  }
+  return tiers.sort((a, b) => a.aboveTokens - b.aboveTokens);
+}
+
+function readRates(
+  entry: LiteLlmEntry,
+  speedSuffix: string,
+  standard?: TokenPrices,
+): TokenRates | null {
+  const prices = readTokenPrices(entry, speedSuffix, standard);
+  if (prices === null) return null;
+  return { ...prices, promptTiers: readPromptTiers(entry, speedSuffix, prices) };
+}
+
+function scalePrices(prices: TokenPrices, multiple: number): TokenPrices {
+  return {
+    inputCostPerToken: prices.inputCostPerToken * multiple,
+    outputCostPerToken: prices.outputCostPerToken * multiple,
+    cacheReadCostPerToken: prices.cacheReadCostPerToken * multiple,
+    cacheCreationCostPerToken: prices.cacheCreationCostPerToken * multiple,
+  };
+}
+
 function scaleTokenRates(rates: TokenRates, multiple: number): TokenRates {
   return {
-    inputCostPerToken: rates.inputCostPerToken * multiple,
-    outputCostPerToken: rates.outputCostPerToken * multiple,
-    cacheReadCostPerToken: rates.cacheReadCostPerToken * multiple,
-    cacheCreationCostPerToken: rates.cacheCreationCostPerToken * multiple,
+    ...scalePrices(rates, multiple),
+    promptTiers: rates.promptTiers.map((tier) => ({
+      aboveTokens: tier.aboveTokens,
+      prices: scalePrices(tier.prices, multiple),
+    })),
   };
 }
 
@@ -97,7 +154,7 @@ export function parseRateTable(document: unknown): RateTable {
   for (const [name, raw] of Object.entries(document as Record<string, unknown>)) {
     if (typeof raw !== "object" || raw === null) continue;
     const entry = raw as LiteLlmEntry;
-    const standard = readTokenRates(entry, "");
+    const standard = readRates(entry, "");
     if (standard === null) continue;
 
     const key = normalizeRateKey(name);
@@ -107,9 +164,9 @@ export function parseRateTable(document: unknown): RateTable {
       ...standard,
       fast:
         multiple === null
-          ? readTokenRates(entry, "_priority", standard)
+          ? readRates(entry, "_priority", standard)
           : scaleTokenRates(standard, multiple),
-      ultrafast: readTokenRates(entry, "_ultrafast", standard),
+      ultrafast: readRates(entry, "_ultrafast", standard),
     });
   }
 
@@ -131,13 +188,28 @@ export function parseRateTable(document: unknown): RateTable {
   return table;
 }
 
-function sameTokenRates(a: TokenRates | null, b: TokenRates | null): boolean {
-  if (a === null || b === null) return a === b;
+function samePrices(a: TokenPrices, b: TokenPrices): boolean {
   return (
     a.inputCostPerToken === b.inputCostPerToken &&
     a.outputCostPerToken === b.outputCostPerToken &&
     a.cacheReadCostPerToken === b.cacheReadCostPerToken &&
     a.cacheCreationCostPerToken === b.cacheCreationCostPerToken
+  );
+}
+
+function sameTokenRates(a: TokenRates | null, b: TokenRates | null): boolean {
+  if (a === null || b === null) return a === b;
+  return (
+    samePrices(a, b) &&
+    a.promptTiers.length === b.promptTiers.length &&
+    a.promptTiers.every((tier, index) => {
+      const other = b.promptTiers[index];
+      return (
+        other !== undefined &&
+        tier.aboveTokens === other.aboveTokens &&
+        samePrices(tier.prices, other.prices)
+      );
+    })
   );
 }
 
@@ -157,6 +229,19 @@ function mergeAliasRate(a: ModelRate, b: ModelRate): ModelRate | null {
 
 function ratesAt(rate: ModelRate, speed: UsageSpeed): TokenRates {
   return (speed === "standard" ? null : rate[speed]) ?? rate;
+}
+
+// A request over a prompt tier pays that tier's prices for every token type.
+function pricesFor(rates: TokenRates, promptTokens: number): TokenPrices {
+  let prices: TokenPrices = rates;
+  for (const tier of rates.promptTiers) {
+    if (promptTokens > tier.aboveTokens) prices = tier.prices;
+  }
+  return prices;
+}
+
+function promptTokensOf(totals: UsageTokenTotals): number {
+  return totals.uncachedInputTokens + totals.cachedInputTokens + totals.cacheCreationTokens;
 }
 
 function normalizeRateKey(model: string): string {
@@ -220,12 +305,12 @@ export interface PricedUsage {
   readonly speedPremiumUsd: number;
 }
 
-function costByCategory(totals: UsageTokenTotals, rates: TokenRates): UsageCategoryCost {
+function costByCategory(totals: UsageTokenTotals, prices: TokenPrices): UsageCategoryCost {
   return {
-    input: totals.uncachedInputTokens * rates.inputCostPerToken,
-    cacheRead: totals.cachedInputTokens * rates.cacheReadCostPerToken,
-    cacheWrite: totals.cacheCreationTokens * rates.cacheCreationCostPerToken,
-    output: totals.outputTokens * rates.outputCostPerToken,
+    input: totals.uncachedInputTokens * prices.inputCostPerToken,
+    cacheRead: totals.cachedInputTokens * prices.cacheReadCostPerToken,
+    cacheWrite: totals.cacheCreationTokens * prices.cacheCreationCostPerToken,
+    output: totals.outputTokens * prices.outputCostPerToken,
   };
 }
 
@@ -256,11 +341,14 @@ export function priceUsage(
     return reported === null ? unsplit(0, "unpriced") : unsplit(reported, "providerReported");
   }
 
-  const listCost = costByCategory(totals, ratesAt(rate, record.speed));
+  const prompt = promptTokensOf(totals);
+  const listCost = costByCategory(totals, pricesFor(ratesAt(rate, record.speed), prompt));
   const listCostUsd = sumCategories(listCost);
   if (reported !== null && listCostUsd <= 0) return unsplit(reported, "providerReported");
   const premiumUsd =
-    record.speed === "standard" ? 0 : listCostUsd - sumCategories(costByCategory(totals, rate));
+    record.speed === "standard"
+      ? 0
+      : listCostUsd - sumCategories(costByCategory(totals, pricesFor(rate, prompt)));
   const scale = reported === null ? 1 : reported / listCostUsd;
   return {
     costUsd: reported ?? listCostUsd,
@@ -283,6 +371,8 @@ export function cacheSavingsUsd(
   const rate =
     overrides?.get(record.model.trim()) ?? lookupRate(table, record.rateModel ?? record.model);
   if (rate === null) return 0;
-  const rates = ratesAt(rate, record.speed);
-  return record.totals.cachedInputTokens * (rates.inputCostPerToken - rates.cacheReadCostPerToken);
+  const prices = pricesFor(ratesAt(rate, record.speed), promptTokensOf(record.totals));
+  return (
+    record.totals.cachedInputTokens * (prices.inputCostPerToken - prices.cacheReadCostPerToken)
+  );
 }

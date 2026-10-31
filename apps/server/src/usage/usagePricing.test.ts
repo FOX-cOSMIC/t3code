@@ -258,4 +258,102 @@ describe("usage pricing", () => {
     expect(lookupRate(table, "provider-b/example-model")?.inputCostPerToken).toBe(3);
     expect(lookupRate(table, "example-model")).toBeNull();
   });
+
+  describe("prompt tiers", () => {
+    const haikuPrices = {
+      input_cost_per_token: 1e-7,
+      output_cost_per_token: 5e-7,
+      cache_read_input_token_cost: 1e-8,
+      cache_creation_input_token_cost: 1.25e-7,
+      input_cost_per_token_above_100k_tokens: 5e-7,
+      output_cost_per_token_above_100k_tokens: 2.5e-6,
+      cache_read_input_token_cost_above_100k_tokens: 5e-8,
+      cache_creation_input_token_cost_above_100k_tokens: 6.25e-7,
+    };
+    const haikuTable = parseRateTable({ "claude-haiku-5-5": haikuPrices });
+    // The prompt is uncached input, cache reads and cache writes together, as the price list counts it.
+    const request = (
+      uncachedInputTokens: number,
+      cachedInputTokens: number,
+      cacheCreationTokens: number,
+      outputTokens: number,
+      speed: UsageSpeed = "standard",
+      model = "claude-haiku-5-5",
+    ) => ({
+      model,
+      totals: {
+        uncachedInputTokens,
+        cachedInputTokens,
+        cacheCreationTokens,
+        outputTokens,
+        reasoningTokens: 0,
+      },
+      reportedCostUsd: null,
+      speed,
+    });
+
+    it("prices every token type at the long-prompt rates when the prompt is over 100,000 tokens", () => {
+      // Prompt of 150,000 tokens: 50,000 + 90,000 + 10,000.
+      expect(priceUsage(haikuTable, request(50_000, 90_000, 10_000, 1_000))).toMatchObject({
+        costUsd: expect.closeTo(0.03825),
+        categoryCostUsd: {
+          input: expect.closeTo(0.025),
+          cacheRead: expect.closeTo(0.0045),
+          cacheWrite: expect.closeTo(0.00625),
+          output: expect.closeTo(0.0025),
+        },
+      });
+    });
+
+    it("keeps base rates at exactly 100,000 prompt tokens and switches one token above", () => {
+      expect(priceUsage(haikuTable, request(40_000, 50_000, 10_000, 1_000)).costUsd).toBeCloseTo(
+        0.00625,
+      );
+      expect(priceUsage(haikuTable, request(40_001, 50_000, 10_000, 1_000)).costUsd).toBeCloseTo(
+        0.0312505,
+      );
+    });
+
+    it("applies the same prompt tier to cache savings", () => {
+      expect(cacheSavingsUsd(haikuTable, request(60_000, 90_000, 0, 0))).toBeCloseTo(0.0405);
+      expect(cacheSavingsUsd(haikuTable, request(10_000, 90_000, 0, 0))).toBeCloseTo(0.0081);
+    });
+
+    it("scales the long-prompt rates by the fast multiple", () => {
+      const fastTable = parseRateTable({
+        "claude-haiku-5-5": { ...haikuPrices, provider_specific_entry: { fast: 2 } },
+      });
+
+      expect(
+        priceUsage(fastTable, request(50_000, 90_000, 10_000, 1_000, "fast")).costUsd,
+      ).toBeCloseTo(2 * 0.03825);
+    });
+
+    it("keeps omitting the 272k tier", () => {
+      const table = parseRateTable({
+        "gpt-6-astra": {
+          input_cost_per_token: 1e-6,
+          output_cost_per_token: 1e-6,
+          input_cost_per_token_above_272k_tokens: 9e-6,
+          output_cost_per_token_above_272k_tokens: 9e-6,
+        },
+      });
+
+      expect(priceUsage(table, request(300_000, 0, 0, 0, "standard", "gpt-6-astra")).costUsd).toBe(
+        0.3,
+      );
+    });
+
+    it("leaves a bare alias unpriced when reseller entries disagree on prompt tiers", () => {
+      const table = parseRateTable({
+        "provider-a/example-model": haikuPrices,
+        "provider-b/example-model": {
+          ...haikuPrices,
+          input_cost_per_token_above_100k_tokens: 7e-7,
+        },
+      });
+
+      expect(lookupRate(table, "example-model")).toBeNull();
+    });
+  });
 });

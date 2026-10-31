@@ -17,8 +17,10 @@ const rates: RateTable = new Map([
         outputCostPerToken: 1e-4,
         cacheReadCostPerToken: 2e-6,
         cacheCreationCostPerToken: 2.5e-5,
+        promptTiers: [],
       },
       ultrafast: null,
+      promptTiers: [],
     },
   ],
 ]);
